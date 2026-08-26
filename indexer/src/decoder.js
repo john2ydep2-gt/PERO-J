@@ -33,6 +33,11 @@ export async function decode(ev) {
   const fnName =
     typeof topics[0] === "symbol" || typeof topics[0] === "string" ? String(topics[0]) : "unknown";
 
+  // Invalidate cache for update events so fresh metadata is fetched
+  if (fnName === "update") {
+    contractMetaCache.delete(contractId);
+  }
+
   // Look up registered ABI for richer description (cached with 60s TTL)
   let meta = contractMetaCache.get(contractId);
   if (meta === undefined) {
