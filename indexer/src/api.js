@@ -121,6 +121,18 @@ export function startApi() {
     })
   );
 
+  // GET /api/contracts?q=&page=&limit= — paginated list of registered contracts,
+  // optionally filtered by name/description via case-insensitive search.
+  app.get(
+    "/api/contracts",
+    asyncHandler(async (req, res) => {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 25;
+      const result = await db.getContracts({ q: req.query.q, page, limit });
+      res.json(result);
+    })
+  );
+
   // GET /api/contracts/:id
   app.get(
     "/api/contracts/:id",
