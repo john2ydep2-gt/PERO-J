@@ -11,7 +11,7 @@ dotenv.config();
 
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
-const POLL_MS = Number(process.env.POLL_MS || 5000);
+const POLL_MS = Math.max(1000, Number(process.env.POLL_MS || 5000));
 
 const rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
