@@ -10,18 +10,9 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-export function startApi() {
+export function createApp() {
   const app = express();
   app.use(express.json());
-
-  app.use(
-    rateLimit({
-      windowMs: 60_000,
-      max: 100,
-      standardHeaders: true,
-      legacyHeaders: false,
-    })
-  );
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
   app.get(
@@ -78,6 +69,17 @@ export function startApi() {
         return res.status(503).json({ status: "error", db: "disconnected" });
       }
       res.status(200).json({ status: "ok", db: "connected", latestLedger: health.lastLedger });
+    })
+  );
+
+  // Rate limiter applies to /api/* routes to protect endpoints against DoS while exempting /health and /ready probes
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: 60_000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
     })
   );
 
@@ -209,5 +211,11 @@ export function startApi() {
     res.status(500).json({ error: err.message || "Internal Server Error" });
   });
 
-  app.listen(PORT, () => console.log(`API listening on :${PORT}`));
+  return app;
 }
+
+export function startApi(port = PORT) {
+  const app = createApp();
+  return app.listen(port, () => console.log(`API listening on :${port}`));
+}
+
