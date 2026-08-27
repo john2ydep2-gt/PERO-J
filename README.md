@@ -68,7 +68,8 @@ PERO-J decodes contract calls on the fly using an ABI-like metadata registry, tu
 git clone https://github.com/PERO-J
 cd PERO-J
 cp .env.example .env
-# Edit .env with your RPC URL and DATABASE_URL
+# Edit .env with your RPC URL and DATABASE_URL. See [.env.example](.env.example)
+# for all supported indexer, database, contract, and SEP-41 settings.
 ```
 
 ### 2. Build & deploy the contract
