@@ -5,12 +5,21 @@ import { api } from "../api";
 import Skeleton from "../components/Skeleton";
 import CopyButton from "../components/CopyButton";
 
+/** Returns true only when the string represents a non-negative integer. */
+function isValidSeq(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
 export default function EventPage() {
-  const { seq = "0" } = useParams();
+  const { seq = "" } = useParams();
+
+  const seqIsValid = isValidSeq(seq);
+  const seqNum = seqIsValid ? Number(seq) : NaN;
 
   const { data: ev, isLoading } = useQuery({
     queryKey: ["event", seq],
-    queryFn: () => api.event(Number(seq)),
+    queryFn: () => api.event(seqNum),
+    enabled: seqIsValid,
   });
 
   useEffect(() => {
@@ -20,6 +29,20 @@ export default function EventPage() {
       document.title = "Soroban Smart Block Explorer";
     }
   }, [ev]);
+
+  if (!seqIsValid) {
+    return (
+      <div className="card" style={{ padding: 24 }}>
+        <p style={{ color: "var(--error, #e05252)", fontWeight: 600 }}>
+          Invalid event ID: &ldquo;{seq}&rdquo;
+        </p>
+        <p style={{ marginTop: 8 }}>
+          Event IDs must be non-negative integers. Please check the URL and try
+          again, or <Link to="/">return to the event feed</Link>.
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading) return <div className="card"><Skeleton rows={4} /></div>;
   if (!ev) return <p>Event not found.</p>;
