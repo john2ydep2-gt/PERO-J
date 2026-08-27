@@ -11,6 +11,7 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 5000,
 });
 const MIGRATION_LOCK_ID = 57_056;
+const MAX_PAGE = 200;
 
 const migrations = [
   {
@@ -182,7 +183,7 @@ export const db = {
    */
   async getEvents({ contract, fn, q, page = 1, limit = 25 } = {}) {
     const pageNum = Number(page) || 1;
-    const limitNum = Number(limit) || 25;
+    const limitNum = Math.min(MAX_PAGE, Number(limit) || 25);
     const conditions = [];
     const params = [];
     if (contract) {
