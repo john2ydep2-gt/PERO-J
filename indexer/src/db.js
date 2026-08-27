@@ -69,6 +69,13 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_events_ledger   ON events(ledger);
     `,
   },
+  {
+    id: 4,
+    name: "backfill_null_event_addresses",
+    sql: `
+      UPDATE events SET event_addresses = ARRAY[]::TEXT[] WHERE event_addresses IS NULL;
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -239,13 +246,13 @@ export const db = {
     const offset = (pageNum - 1) * limitNum;
 
     const countRes = await pool.query(
-      "SELECT COUNT(*) FROM events WHERE event_addresses @> ARRAY[$1]",
+      "SELECT COUNT(*) FROM events WHERE COALESCE(event_addresses, ARRAY[]::TEXT[]) @> ARRAY[$1]",
       [address]
     );
     const total = parseInt(countRes.rows[0].count, 10);
 
     const { rows } = await pool.query(
-      "SELECT * FROM events WHERE event_addresses @> ARRAY[$1] ORDER BY ledger DESC LIMIT $2 OFFSET $3",
+      "SELECT * FROM events WHERE COALESCE(event_addresses, ARRAY[]::TEXT[]) @> ARRAY[$1] ORDER BY ledger DESC LIMIT $2 OFFSET $3",
       [address, limitNum, offset]
     );
 

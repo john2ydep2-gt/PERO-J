@@ -253,6 +253,17 @@ describe("db.getWalletEvents()", () => {
       "expected event_addresses in query"
     );
   });
+
+  it("uses COALESCE to handle NULL event_addresses safely", async () => {
+    _nextRow = { count: "0" };
+    const addr = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+    await db.getWalletEvents(addr);
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(
+      sqls.some((s) => s.includes("COALESCE(event_addresses, ARRAY[]::TEXT[])")),
+      "expected COALESCE guard in query"
+    );
+  });
 });
 
 describe("db.get24hVolume()", () => {
