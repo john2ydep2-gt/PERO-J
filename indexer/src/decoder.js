@@ -116,6 +116,22 @@ function buildDescription(fn, args, data, contractName) {
       const [from, amount, token] = args;
       return `${amount} ${token ?? ""} burned from ${fmt(from)} on ${contractName}`;
     }
+    case "supply": {
+      const [caller, asset, amount] = args;
+      return `Address ${fmt(caller)} supplied ${amount} ${fmt(asset)} on ${contractName}`;
+    }
+    case "borrow": {
+      const [caller, asset, amount] = args;
+      return `Address ${fmt(caller)} borrowed ${amount} ${fmt(asset)} on ${contractName}`;
+    }
+    case "repay": {
+      const [caller, asset, amount] = args;
+      return `Address ${fmt(caller)} repaid ${amount} ${fmt(asset)} on ${contractName}`;
+    }
+    case "liquidate": {
+      const [liquidator, borrower, asset, amount] = args;
+      return `Address ${fmt(liquidator)} liquidated ${fmt(borrower)} for ${amount} ${fmt(asset)} on ${contractName}`;
+    }
     default:
       return genericDescription(fn, args, data, contractName);
   }
