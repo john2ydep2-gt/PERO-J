@@ -32,7 +32,7 @@ export default function ContractPage() {
     },
   });
 
-  if (metaLoading) return <div className="card"><Skeleton rows={3} /></div>;
+  if (metaLoading) return <div className="card"><Skeleton variant="card" rows={3} /></div>;
   if (!meta) return <p>Contract not found.</p>;
 
   return (
@@ -102,7 +102,7 @@ export default function ContractPage() {
 
       <h3>Recent Events</h3>
       <div className="card">
-        {evLoading ? <Skeleton /> : <EventTable events={events} />}
+        {evLoading ? <Skeleton variant="table" /> : <EventTable events={events} />}
       </div>
     </div>
   );

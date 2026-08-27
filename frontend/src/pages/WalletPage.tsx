@@ -55,7 +55,7 @@ export default function WalletPage() {
           : !isValidAddress
           ? <p style={{ color: "var(--muted)" }}>Invalid Stellar address.</p>
           : isLoading
-          ? <Skeleton />
+          ? <Skeleton variant="table" />
           : <EventTable events={events} />}
       </div>
 
