@@ -1,5 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
@@ -9,6 +10,12 @@ const PORT = process.env.PORT || 3001;
 const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
+
+export const statsCache = new LRUCache({
+  max: 10,
+  ttl: 30_000,
+});
+
 
 export function startApi() {
   const app = express();
@@ -89,6 +96,20 @@ export function startApi() {
       res.json(result);
     })
   );
+
+  // GET /api/stats — summary statistics: total events, contracts, unique addresses (cached 30s)
+  app.get(
+    "/api/stats",
+    asyncHandler(async (req, res) => {
+      let stats = statsCache.get("stats");
+      if (stats === undefined) {
+        stats = await db.getStats();
+        statsCache.set("stats", stats);
+      }
+      res.json(stats);
+    })
+  );
+
 
   // GET /api/events?contract=&fn=&page=&q=
   app.get(
