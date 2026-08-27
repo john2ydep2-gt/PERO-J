@@ -63,6 +63,11 @@ function isExecutionError(msg) {
   return EXECUTION_ERROR_PATTERNS.some((p) => p.test(msg));
 }
 
+function isMissingFunctionError(err) {
+  const msg = String(err?.message || err?.error || err || "");
+  return /function not found|not found|no such function/i.test(msg);
+}
+
 function isRateLimitError(err) {
   const status = err?.status || err?.response?.status;
   const msg = String(err?.message || err?.error || err || "");
