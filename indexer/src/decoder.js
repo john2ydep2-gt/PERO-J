@@ -203,9 +203,12 @@ function extractAddresses(values) {
   return [...found];
 }
 
-function fmt(addr) {
-  if (typeof addr !== "string" || addr.length < 10) {
-    return String(addr);
+const ADDRESS_RE = /^[GC][A-Z0-9]{55}$/;
+
+export function fmt(addr) {
+  if (typeof addr === "string" && ADDRESS_RE.test(addr)) {
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
   }
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  return typeof addr === "string" ? addr : String(addr);
 }
+

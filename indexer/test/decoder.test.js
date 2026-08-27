@@ -57,7 +57,8 @@ const [C1, C2, C3, C4, C5, C6, C7, C8] = [1, 2, 3, 4, 5, 6, 7, 8].map((i) =>
 // Import db first, replace getContractMeta, then import decode.
 
 import { db } from "../src/db.js";
-import { decode } from "../src/decoder.js";
+import { decode, fmt } from "../src/decoder.js";
+
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
@@ -192,3 +193,34 @@ describe("decode()", () => {
     assert.ok(result.raw_topics.every((t) => typeof t === "string"));
   });
 });
+
+describe("fmt()", () => {
+  it("truncates valid 56-character G… public key to first6…last4 format", () => {
+    const key = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
+    assert.equal(fmt(key), "GCFIRY…YOJR");
+  });
+
+  it("truncates valid 56-character C… contract address to first6…last4 format", () => {
+    const contract = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+    assert.equal(fmt(contract), "CDLZFC…CYSC");
+  });
+
+  it("returns non-address string 'swap' unchanged", () => {
+    assert.equal(fmt("swap"), "swap");
+  });
+
+  it("returns number 123 as '123' unchanged", () => {
+    assert.equal(fmt(123), "123");
+  });
+
+  it("returns short strings unchanged", () => {
+    assert.equal(fmt("XLM"), "XLM");
+    assert.equal(fmt("G123"), "G123");
+  });
+
+  it("returns non-matching 56-character string unchanged", () => {
+    const nonAddr = "ABCDEFGHIJ1234567890123456789012345678901234567890123456";
+    assert.equal(fmt(nonAddr), nonAddr);
+  });
+});
+
