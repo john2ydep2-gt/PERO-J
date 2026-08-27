@@ -108,12 +108,12 @@ describe("decode()", () => {
     db.getContractMeta = async (id) =>
       id === C4 ? { id: C4, name: "Blend", functions: [{ name: "transfer" }] } : null;
 
-    const ev = makeRawEvent(C4, "transfer", [
-      scAddress(ADDR_G),
-      scAddress(ADDR_G2),
-      xdr.ScVal.scvString("50"),
-      xdr.ScVal.scvString("USDC"),
-    ]);
+    const ev = makeRawEvent(
+      C4,
+      "transfer",
+      [scAddress(ADDR_G), scAddress(ADDR_G2)],
+      xdr.ScVal.scvString("50")
+    );
 
     const result = await decode(ev);
     assert.equal(result.function, "transfer");
