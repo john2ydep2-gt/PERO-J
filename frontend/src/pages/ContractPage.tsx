@@ -42,7 +42,7 @@ export default function ContractPage() {
         <p style={{ color: "var(--muted)", marginBottom: 12 }}>{meta.description}</p>
         <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
           <code style={{ fontSize: 12, color: "var(--muted)", wordBreak: "break-all", flex: 1 }}>{id}</code>
-          <CopyButton value={id} size="small" />
+          <CopyButton value={id} size="small" ariaLabel="Copy contract ID" />
         </div>
         {meta.registered_by && (
           <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>

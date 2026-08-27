@@ -35,8 +35,8 @@ export default function EventPage() {
         <Row label="Function"    value={ev.function} badge />
         <Row label="Ledger"      value={ev.ledger.toLocaleString()} />
         {ev.created_at && <Row label="Time" value={new Date(ev.created_at).toUTCString()} />}
-        <Row label="Contract" value={<Link to={`/contract/${ev.contract_id}`}>{ev.contract_id}</Link>} action={<CopyButton value={ev.contract_id} size="small" />} />
-        {ev.tx_hash && <Row label="Tx Hash" value={ev.tx_hash} mono action={<CopyButton value={ev.tx_hash} size="small" />} />}
+        <Row label="Contract" value={<Link to={`/contract/${ev.contract_id}`}>{ev.contract_id}</Link>} action={<CopyButton value={ev.contract_id} size="small" ariaLabel="Copy contract ID" />} />
+        {ev.tx_hash && <Row label="Tx Hash" value={ev.tx_hash} mono action={<CopyButton value={ev.tx_hash} size="small" ariaLabel="Copy transaction hash" />} />}
         {ev.raw_topics.length > 0 && (
           <Row label="Topics" value={ev.raw_topics.join(", ")} mono />
         )}
