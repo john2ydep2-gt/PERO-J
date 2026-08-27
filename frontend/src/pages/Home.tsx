@@ -12,6 +12,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
 
+  useEffect(() => {
+    document.title = "Soroban Smart Block Explorer";
+  }, []);
+
   const { data: functions = [], isLoading: functionsLoading } = useQuery({
     queryKey: ["distinctFunctions"],
     queryFn: () => api.distinctFunctions(),

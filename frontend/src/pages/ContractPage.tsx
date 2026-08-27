@@ -23,6 +23,16 @@ export default function ContractPage() {
   });
   const events = eventsData?.events ?? [];
 
+  useEffect(() => {
+    if (meta?.name) {
+      document.title = `${meta.name} - Soroban Smart Block Explorer`;
+    } else if (id) {
+      document.title = `Contract ${id} - Soroban Smart Block Explorer`;
+    } else {
+      document.title = "Soroban Smart Block Explorer";
+    }
+  }, [meta, id]);
+
   // Invalidate contract cache after a successful registration so the page
   // reflects the new metadata immediately without waiting for staleTime to expire.
   const registerMutation = useMutation({
