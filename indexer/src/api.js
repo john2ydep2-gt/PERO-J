@@ -10,7 +10,7 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-export function startApi() {
+export function createApp() {
   const app = express();
   app.use(express.json());
 
@@ -101,6 +101,28 @@ export function startApi() {
         page: Number(req.query.page) || 1,
       });
       res.json(result);
+    })
+  );
+
+  // GET /api/events/:seq/raw
+  app.get(
+    "/api/events/:seq/raw",
+    asyncHandler(async (req, res) => {
+      const seqStr = String(req.params.seq).trim();
+      const seq = parseInt(seqStr, 10);
+      if (isNaN(seq) || seq < 0 || !/^\d+$/.test(seqStr)) {
+        return res.status(400).json({ error: "seq must be a non-negative integer" });
+      }
+      const ev = await db.getEvent(seq);
+      if (!ev) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      res.json({
+        seq: typeof ev.seq === "bigint" ? Number(ev.seq) : ev.seq,
+        raw_topics: ev.raw_topics,
+        raw_data: ev.raw_data,
+        tx_hash: ev.tx_hash,
+      });
     })
   );
 
@@ -209,5 +231,10 @@ export function startApi() {
     res.status(500).json({ error: err.message || "Internal Server Error" });
   });
 
+  return app;
+}
+
+export function startApi() {
+  const app = createApp();
   app.listen(PORT, () => console.log(`API listening on :${PORT}`));
 }
