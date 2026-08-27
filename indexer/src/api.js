@@ -121,6 +121,21 @@ export function startApi() {
     })
   );
 
+  // GET /api/contracts/:id/events?fn=&page=&q=
+  app.get(
+    "/api/contracts/:id/events",
+    asyncHandler(async (req, res) => {
+      const result = await db.getEvents({
+        contract: req.params.id,
+        fn: req.query.fn,
+        q: req.query.q,
+        page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 25,
+      });
+      res.json(result);
+    })
+  );
+
   // GET /api/contracts/:id
   app.get(
     "/api/contracts/:id",
