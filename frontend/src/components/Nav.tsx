@@ -37,6 +37,19 @@ export default function Nav() {
       >
         ⬡ Soroban Explorer
       </NavLink>
+      <NavLink
+        to="/contracts"
+        style={({ isActive }) => ({
+          fontWeight: 600,
+          fontSize: 15,
+          whiteSpace: "nowrap",
+          color: isActive ? "var(--accent)" : "inherit",
+          borderBottom: isActive ? "2px solid var(--accent)" : "none",
+          paddingBottom: isActive ? "4px" : "0px",
+        })}
+      >
+        Contracts
+      </NavLink>
       <form onSubmit={search} style={{ display: "flex", gap: 8, flex: 1, maxWidth: 600 }}>
         <input
           value={q}
