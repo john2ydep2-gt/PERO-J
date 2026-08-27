@@ -132,6 +132,20 @@ Relates to #92
 
 ## Pull Request Guidelines
 
+### Changelog Workflow
+
+Keep unreleased conventional commits visible while developing:
+
+```bash
+make changelog-preview
+make changelog
+```
+
+Use `make changelog-preview` to inspect the generated entries without changing
+the working tree. Run `make changelog` when the updated `CHANGELOG.md` should
+be included in a commit. The release workflow also regenerates the changelog
+from the complete commit history.
+
 ### Before You Start
 
 1. **Open an issue first** for large or breaking changes to discuss the approach
