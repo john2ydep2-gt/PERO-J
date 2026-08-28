@@ -208,33 +208,6 @@ impl ExplorerContract {
             panic_with_error!(env, Error::Unauthorized);
         }
     }
-
-    /// Read the current event sequence counter from instance storage.
-    fn event_seq(env: &Env) -> u64 {
-        env.storage()
-            .instance()
-            .get(&DataKey::EventSeq)
-            .unwrap_or_else(|| panic_with_error!(env, Error::NotFound))
-    }
-
-    /// Validate `ContractMeta` field limits.
-    ///
-    /// Rejects ABI registrations that exceed the on-chain size caps so that
-    /// a single call cannot bloat storage without limit.  Also enforces that
-    /// every `ParamDef.kind` is a known `ParamKind` variant — the enum type
-    /// already guarantees this at the XDR layer, so this is a belt-and-
-    /// suspenders check that documents the invariant explicitly.
-    fn validate_meta(env: &Env, meta: &ContractMeta) {
-        if meta.functions.len() > MAX_FUNCTIONS {
-            panic_with_error!(env, Error::LimitExceeded);
-        }
-        for i in 0..meta.functions.len() {
-            let f = meta.functions.get(i).unwrap();
-            if f.params.len() > MAX_PARAMS {
-                panic_with_error!(env, Error::LimitExceeded);
-            }
-        }
-    }
 }
 
 #[contractimpl]
@@ -452,6 +425,11 @@ impl ExplorerContract {
             panic_with_error!(&env, Error::LimitExceeded);
         }
 
+        // Guard against oversized description strings.
+        if description.len() > MAX_DESCRIPTION_LEN {
+            panic_with_error!(&env, Error::LimitExceeded);
+        }
+
         let seq: u64 = Self::event_seq(&env);
         let event = DecodedEvent {
             seq,
@@ -656,7 +634,7 @@ mod tests {
 
     #[test]
     fn test_submit_event_max_description_len_ok() {
-        let (env, client) = setup();
+        let (env, client) = setup!();
         let admin = Address::generate(&env);
         client.init(&admin);
 
@@ -674,7 +652,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_submit_event_oversized_description_panics() {
-        let (env, client) = setup();
+        let (env, client) = setup!();
         let admin = Address::generate(&env);
         client.init(&admin);
 

@@ -58,7 +58,10 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - name: Install soroban CLI
-        run: cargo install soroban-cli --locked
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libdbus-1-dev pkg-config
+          cargo install soroban-cli
       - name: Install Playwright
         working-directory: tests/e2e
         run: |
