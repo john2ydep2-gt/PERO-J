@@ -28,7 +28,7 @@ jobs:
         working-directory: indexer
         run: |
           npm ci
-          node --test test/
+          npm test
 
   frontend:
     runs-on: ubuntu-latest
