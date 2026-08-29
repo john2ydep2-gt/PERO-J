@@ -90,6 +90,8 @@ Closes [#342](../../issues/342)
 
 - Show total event count and active filter summary in Home.tsx ([`c51eec8`](../../commit/c51eec80cb137918bcaf489fd16ed34f77acff6c))
 
+- Make database connection pool size configurable via DATABASE_POOL_SIZE ([`a1cdc78`](../../commit/a1cdc7817ef370e85dc2eadcf3e5b687576eef1d))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -409,6 +411,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`a2a6626`](../../commit/a2a6626612282c1a3671cf1fd77a7998a74e43f0))
 
 - Auto-update CHANGELOG.md [skip ci] ([`f84205a`](../../commit/f84205aa6bf6002e90ac8efbe6120b5b87003652))
 
