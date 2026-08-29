@@ -1,7 +1,7 @@
 import React from "react";
 
 /** A single animated placeholder bar. */
-function SkeletonBar({ width = "100%", height = 16 }: { width?: string | number; height?: number }) {
+export function SkeletonBar({ width = "100%", height = 16 }: { width?: string | number; height?: number }) {
   return (
     <div
       style={{
