@@ -408,6 +408,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`a079d4e`](../../commit/a079d4ef8211dd9662b6123f93d954ad0be4733d))
+
 - Auto-update CHANGELOG.md [skip ci] ([`8ff57e4`](../../commit/8ff57e444a7176b192840d6dc5bbe219abc31329))
 
 - Auto-update CHANGELOG.md [skip ci] ([`649b310`](../../commit/649b3109eea6a63dc73088f0a75df4ea6f0f5732))
@@ -611,6 +613,8 @@ When navigating to an unregistered contract ID, render a registration form
 - Add GET /api/events/:seq/raw endpoint returning un-decoded XDR topics ([#347](../../issues/347)) ([`4fad1ff`](../../commit/4fad1ffa698ff16b57dcbbef5931e5df4372cd13))
 
 - Add GET /api/stats endpoint returning total events, contracts, and unique addresses ([`7e85094`](../../commit/7e850948f004cf2aa468738f065e793f125413d8))
+
+- Add Blend protocol ABI fixture and decoders for supply, borrow, repay, liquidate ([`c1afa70`](../../commit/c1afa7024c7b2fc849fdb235d6dd41168a7cfa79))
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
