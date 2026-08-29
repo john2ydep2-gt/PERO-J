@@ -391,6 +391,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`3d8b1de`](../../commit/3d8b1de4e6e2193be5de801c5a4b5ef9e29302e5))
+
 - Auto-update CHANGELOG.md [skip ci] ([`7440e83`](../../commit/7440e8322c7b0e7da8a31ffbbb1ddf619a40a893))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ededb6b`](../../commit/ededb6b93522b02e0e225b63b970350d310dd0c8))
@@ -525,6 +527,11 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add GET /api/events/stream SSE endpoint and streamEvents frontend client helper ([`8b09874`](../../commit/8b098743013c3ade80ebfcb8bf86d42fe0b385b3))
+
+Closes [#413](../../issues/413)
+
 
 - Add Kubernetes deployment manifests and guide for indexer and frontend ([`8d4b8d3`](../../commit/8d4b8d35d79bf38976c77b6fe25c772635cee869))
 
