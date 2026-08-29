@@ -12,6 +12,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Add accessible aria-label prop to CopyButton ([`e8e173e`](../../commit/e8e173ea7e7021dfa3324c4caf92b32858014b27))
 
+- Validate seq param in EventPage to prevent NaN API request ([`4a0f8cd`](../../commit/4a0f8cd5fd5ea8dcd5fa779af300356654bd5913))
+
+If a user navigates to /event/abc, Number('abc') evaluates to NaN, which
+  was being forwarded directly to GET /api/events/NaN causing a 400 error
+  and a generic 'Event not found.' message with no explanation.
+
+
 - Remove redundant ALTER TABLE sac_asset from migration [#1](../../issues/1) ([`6f8e502`](../../commit/6f8e50223ef5b1573d7ba79cbc40b63f20ac775d))
 
 - Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
@@ -78,13 +85,6 @@ Closes [#342](../../issues/342)
 
 
 - Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
-
-- Validate seq param in EventPage to prevent NaN API request ([`4a0f8cd`](../../commit/4a0f8cd5fd5ea8dcd5fa779af300356654bd5913))
-
-If a user navigates to /event/abc, Number('abc') evaluates to NaN, which
-  was being forwarded directly to GET /api/events/NaN causing a 400 error
-  and a generic 'Event not found.' message with no explanation.
-
 
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
@@ -406,6 +406,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`41a354c`](../../commit/41a354c38724e939a800fdea42bfb4311f7d7961))
+
 - Auto-update CHANGELOG.md [skip ci] ([`86504f4`](../../commit/86504f4872c6620fe9ff86177201dfea73b75e14))
 
 - Auto-update CHANGELOG.md [skip ci] ([`794b50e`](../../commit/794b50e925272991eb7fb7a6b7850949f3049229))
@@ -591,6 +593,8 @@ When navigating to an unregistered contract ID, render a registration form
   - Functions list supports add/remove with name + description per entry
   - Existing registered contracts are unaffected
 
+
+- Add robots.txt and SEO metadata tags ([`b0a44b9`](../../commit/b0a44b9c791fea500efc5fce5d300df1a02124e0))
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
