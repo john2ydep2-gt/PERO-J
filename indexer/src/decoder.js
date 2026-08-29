@@ -12,6 +12,12 @@ const contractMetaCache = new LRUCache({
   ttl: 60_000,
 });
 
+// How long a "not registered" (null) lookup stays cached. This is deliberately
+// much shorter than the ABI TTL so that a contract registered in the DB during
+// the 60s ABI cache window is re-discovered promptly instead of being stuck
+// behind a stale null value for up to the full window.
+const NOT_REGISTERED_TTL_MS = 2_000;
+
 /**
  * Decode a raw Soroban RPC event into a human-readable record.
  * Falls back to a generic description when no ABI is registered.
@@ -33,11 +39,19 @@ export async function decode(ev) {
   const fnName =
     typeof topics[0] === "symbol" || typeof topics[0] === "string" ? String(topics[0]) : "unknown";
 
-  // Look up registered ABI for richer description (cached with 60s TTL)
+  // Look up registered ABI for richer description (cached with 60s TTL).
+  // Distinguish between "not yet checked" (no cache entry → always query DB)
+  // and "not registered" (explicit negative entry cached briefly) so that a
+  // contract registered while events are flowing is decoded against the new ABI
+  // as soon as the short negative cache expires.
   let meta = contractMetaCache.get(contractId);
   if (meta === undefined) {
     meta = await db.getContractMeta(contractId).catch(() => null);
-    contractMetaCache.set(contractId, meta);
+    if (meta !== null) {
+      contractMetaCache.set(contractId, meta);
+    } else {
+      contractMetaCache.set(contractId, null, { ttl: NOT_REGISTERED_TTL_MS });
+    }
   }
   const fnAbi = meta?.functions?.find((f) => f.name === fnName);
 
