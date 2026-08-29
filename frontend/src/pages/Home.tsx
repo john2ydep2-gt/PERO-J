@@ -78,7 +78,7 @@ export default function Home() {
 
       <div className="card">
         {isLoading ? (
-          <Skeleton />
+          <Skeleton variant="table" />
         ) : events.length === 0 && page > 1 ? (
           <div style={{ textAlign: "center", padding: "40px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>

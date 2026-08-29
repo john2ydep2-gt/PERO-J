@@ -125,7 +125,7 @@ export default function ContractPage() {
 
       <h3>Recent Events</h3>
       <div className="card">
-        {evLoading ? <Skeleton /> : <EventTable events={events} />}
+        {evLoading ? <Skeleton variant="table" /> : <EventTable events={events} />}
       </div>
     </div>
   );
