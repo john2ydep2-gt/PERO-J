@@ -408,6 +408,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`b3f537a`](../../commit/b3f537ac772eaa31e3655ddcf6bb787926d62596))
+
 - Auto-update CHANGELOG.md [skip ci] ([`2db0487`](../../commit/2db0487179d36472701168dd7bcf55389cc0b0e6))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a079d4e`](../../commit/a079d4ef8211dd9662b6123f93d954ad0be4733d))
@@ -860,6 +862,16 @@ Add a tests/integration/ directory with stub tests that document the
     when Address.fromString() validated the checksum)
   - Fix invalid DUMMY_SOURCE strkey in src/sep41Metadata.js (crashed new Account())
 
+
+
+### Contracts/explorer
+
+- Enforce MAX_DESCRIPTION_LEN in submit_event ([`fa73dd0`](../../commit/fa73dd0aa7215a5fa8db77b0ee56909b6f076555))
+
+
+### Indexer
+
+- Treat 'function not found' as missing in validateSep41 ([`8c3d338`](../../commit/8c3d338dafb16a53a8035b1db346a5ea28bc3723))
 
 
 
