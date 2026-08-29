@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Read transfer amount from event data, not topic ([`cca26f5`](../../commit/cca26f51cf750174e537a9b33ad38b388b0d27a0))
+
 - Cap getEvents limit at MAX_PAGE (200) ([`d7b664f`](../../commit/d7b664f97f3dcb00b9fafa2df239b54b05ac2008))
 
 - Resolve issues [#368](../../issues/368), [#369](../../issues/369), [#370](../../issues/370), [#371](../../issues/371) ([`5bb3d82`](../../commit/5bb3d8232709de57da619097919841607a53fe28))
@@ -377,6 +379,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`78cf7e2`](../../commit/78cf7e216964755ff68d176d0b0e70c01361145c))
+
 - Auto-update CHANGELOG.md [skip ci] ([`0978cb8`](../../commit/0978cb8811912f61403f5cb15199f5a24f4160ef))
 
 - Auto-update CHANGELOG.md [skip ci] ([`96bef84`](../../commit/96bef846f53002d3c8d637e795396fe6b30f12b1))
@@ -720,6 +724,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 
 ### Testing
+
+- Transfer sends amount in event data per SEP-41 ([`5d467db`](../../commit/5d467db96421d79e171922ec8155cdbdfd227e2a))
 
 - Add WASM sandbox integration test stubs ([`34a2dba`](../../commit/34a2dba4cf9dec0223758b8b5891a33584a9b96a))
 
