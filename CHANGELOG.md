@@ -410,6 +410,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`f84205a`](../../commit/f84205aa6bf6002e90ac8efbe6120b5b87003652))
+
 - Auto-update CHANGELOG.md [skip ci] ([`43a0c2c`](../../commit/43a0c2cae283ed71bc6fad269d93a63ab727912f))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ba0b6fb`](../../commit/ba0b6fb552ab3b9fc8c7f81cec1d99106952d965))
@@ -576,6 +578,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add dedicated expand button for long descriptions in EventTable ([`1a14bf3`](../../commit/1a14bf3abef7b40285eac0201fe2eeb8ff9d55ac))
 
 - Add Docker Compose health checks for indexer and frontend services ([`dd0f0b0`](../../commit/dd0f0b07d3ddc3ec524bcdc9ae34a0963e84b738))
 
