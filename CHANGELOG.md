@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Add accessible aria-label prop to CopyButton ([`e8e173e`](../../commit/e8e173ea7e7021dfa3324c4caf92b32858014b27))
+
 - Remove redundant ALTER TABLE sac_asset from migration [#1](../../issues/1) ([`6f8e502`](../../commit/6f8e50223ef5b1573d7ba79cbc40b63f20ac775d))
 
 - Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
@@ -401,6 +403,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`794b50e`](../../commit/794b50e925272991eb7fb7a6b7850949f3049229))
 
 - Auto-update CHANGELOG.md [skip ci] ([`02f408c`](../../commit/02f408cffe1281391e353701550a61a8e4f9c4e0))
 
