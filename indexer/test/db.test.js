@@ -334,3 +334,29 @@ describe("db.get24hVolume()", () => {
     assert.equal(result.volume_scaled, "1.0000000");
   });
 });
+
+describe("db.getStats()", () => {
+  beforeEach(() => resetMock());
+
+  it("returns { total_events, total_contracts, unique_addresses } with 0 for empty db", async () => {
+    const stats = await db.getStats();
+    assert.deepEqual(stats, {
+      total_events: 0,
+      total_contracts: 0,
+      unique_addresses: 0,
+    });
+    assert.equal(_calls.length, 3, "expected 3 count queries");
+  });
+
+  it("executes COUNT queries for events, contracts, and distinct addresses", async () => {
+    await db.getStats();
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(sqls.some((s) => s.includes("FROM events")), "expected count from events");
+    assert.ok(sqls.some((s) => s.includes("FROM contracts")), "expected count from contracts");
+    assert.ok(
+      sqls.some((s) => s.includes("event_addresses")),
+      "expected distinct count from event_addresses"
+    );
+  });
+});
+

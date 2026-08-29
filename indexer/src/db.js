@@ -409,6 +409,26 @@ export const db = {
   },
 
   /**
+   * Fetch aggregate statistics across events, contracts, and unique addresses.
+   *
+   * @returns {Promise<{ total_events: number, total_contracts: number, unique_addresses: number }>}
+   */
+  async getStats() {
+    const [eventsRes, contractsRes, addressesRes] = await Promise.all([
+      pool.query("SELECT COUNT(*) FROM events"),
+      pool.query("SELECT COUNT(*) FROM contracts"),
+      pool.query(
+        "SELECT COUNT(DISTINCT addr) FROM (SELECT unnest(event_addresses) AS addr FROM events) sub"
+      ),
+    ]);
+    return {
+      total_events: parseInt(eventsRes.rows?.[0]?.count ?? "0", 10) || 0,
+      total_contracts: parseInt(contractsRes.rows?.[0]?.count ?? "0", 10) || 0,
+      unique_addresses: parseInt(addressesRes.rows?.[0]?.count ?? "0", 10) || 0,
+    };
+  },
+
+  /**
    * Read the persisted indexer cursor from the indexer_state table.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<number|null>} The last successfully indexed ledger, or null.
@@ -444,3 +464,4 @@ export const db = {
     );
   },
 };
+
