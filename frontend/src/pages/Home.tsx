@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import EventTable from "../components/EventTable";
@@ -8,37 +7,36 @@ import Skeleton, { SkeletonBar } from "../components/Skeleton";
 export default function Home() {
   const [fnFilter, setFnFilter] = useState("");
   const [customFn, setCustomFn] = useState("");
-  const [useCustom, setUseCustom] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
 
-  const { data: functions = [], isLoading: functionsLoading } = useQuery({
+  const { data: functions = [] } = useQuery({
     queryKey: ["distinctFunctions"],
     queryFn: () => api.distinctFunctions(),
     staleTime: 5 * 60 * 1000,
   });
 
-  const activeFn = (useCustom ? customFn : fnFilter).trim();
+  const effectiveFn = customFn || fnFilter || undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["events", fnFilter, customFn, page],
-    queryFn: () => api.events({ fn: useCustom ? customFn : fnFilter || undefined, page }),
+    queryKey: ["events", effectiveFn, searchQuery, page],
+    queryFn: () => api.events({ fn: effectiveFn, q: searchQuery || undefined, page }),
   });
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
+  const hasActiveFilter = Boolean((useCustom ? customFn : fnFilter).trim());
 
   const handleFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     setFnFilter(value);
-    setUseCustom(false);
     setCustomFn("");
     setPage(1);
   };
 
   const handleCustomFnChange = (value: string) => {
     setCustomFn(value);
-    setUseCustom(true);
+    setFnFilter("");
     setPage(1);
   };
 
@@ -68,10 +66,18 @@ export default function Home() {
           />
         </form>
         <label style={{ color: "var(--muted)" }}>Filter by function:</label>
+        <select value={fnFilter} onChange={handleFunctionChange}>
+          <option value="">All functions</option>
+          {functions.map(f => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
-          placeholder="Function name…"
-          value={useCustom ? customFn : fnFilter}
+          placeholder="Or type custom function name…"
+          value={customFn}
           onChange={e => handleCustomFnChange(e.target.value)}
           style={{ flex: "0 1 200px" }}
         />
@@ -88,7 +94,7 @@ export default function Home() {
 
       <div className="card">
         {isLoading ? (
-          <Skeleton />
+          <Skeleton variant="table" />
         ) : events.length === 0 && page > 1 ? (
           <div style={{ textAlign: "center", padding: "40px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>
@@ -99,7 +105,11 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <EventTable events={events} />
+          <EventTable
+            events={events}
+            emptyMessage={hasActiveFilter ? "No events match your current filters." : undefined}
+            emptySubtitle={hasActiveFilter ? "Try adjusting your filter criteria." : undefined}
+          />
         )}
       </div>
 
