@@ -136,6 +136,7 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 | `GET /api/events/:seq` | Single event |
 | `GET /api/events/:seq/raw` | Raw un-decoded event topics and data: `{ seq, raw_topics, raw_data, tx_hash }` |
 | `GET /api/contracts/:id` | Contract ABI metadata |
+| `GET /api/contracts/:id/events?fn=&page=` | Paginated event list for contract: `{ events, total, page, limit }` |
 | `POST /api/contracts` | Register contract metadata |
 | `DELETE /api/contracts/:id` | Remove contract ABI metadata (requires `Authorization: Bearer <API_ADMIN_KEY>`) |
 | `GET /api/wallet/:address` | Wallet event history |
