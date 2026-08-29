@@ -108,12 +108,12 @@ describe("decode()", () => {
     db.getContractMeta = async (id) =>
       id === C4 ? { id: C4, name: "Blend", functions: [{ name: "transfer" }] } : null;
 
-    const ev = makeRawEvent(C4, "transfer", [
-      scAddress(ADDR_G),
-      scAddress(ADDR_G2),
-      xdr.ScVal.scvString("50"),
-      xdr.ScVal.scvString("USDC"),
-    ]);
+    const ev = makeRawEvent(
+      C4,
+      "transfer",
+      [scAddress(ADDR_G), scAddress(ADDR_G2)],
+      xdr.ScVal.scvString("50")
+    );
 
     const result = await decode(ev);
     assert.equal(result.function, "transfer");
@@ -190,5 +190,35 @@ describe("decode()", () => {
     db.getContractMeta = async () => null;
     const result = await decode(makeRawEvent(C1, "check"));
     assert.ok(result.raw_topics.every((t) => typeof t === "string"));
+  });
+
+  it("genericDescription does not truncate a valid 56-char strkey", async () => {
+    db.getContractMeta = async () => null;
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(ADDR_G)]);
+    const result = await decode(ev);
+    assert.ok(result.description.includes(ADDR_G), "valid strkey should not be truncated");
+  });
+
+  it("genericDescription does not truncate a 128-char non-address string", async () => {
+    db.getContractMeta = async () => null;
+    const longStr = "a b ".repeat(32);
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(longStr)]);
+    const result = await decode(ev);
+    assert.ok(result.description.includes(longStr), "128-char string should not be truncated");
+  });
+
+  it("genericDescription truncates a 129-char non-address string", async () => {
+    db.getContractMeta = async () => null;
+    const longStr = "c d ".repeat(32) + "e";
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(longStr)]);
+    const result = await decode(ev);
+    assert.ok(
+      result.description.includes("…"),
+      "129-char string should be truncated"
+    );
+    assert.ok(
+      !result.description.includes(longStr),
+      "129-char string full value should not appear"
+    );
   });
 });

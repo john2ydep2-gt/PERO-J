@@ -276,6 +276,7 @@ impl ExplorerContract {
     /// emergency recovery procedure.
     pub fn transfer_admin(env: Env, current_admin: Address, new_admin: Address) {
         current_admin.require_auth();
+        // See SECURITY.md's Admin Transfer Procedure for the required auth envelope.
         new_admin.require_auth();
 
         let stored = Self::admin(&env);

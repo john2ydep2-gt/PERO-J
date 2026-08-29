@@ -21,7 +21,7 @@ export default function EventPage() {
     }
   }, [ev]);
 
-  if (isLoading) return <div className="card"><Skeleton rows={4} /></div>;
+  if (isLoading) return <div className="card"><Skeleton variant="card" rows={4} /></div>;
   if (!ev) return <p>Event not found.</p>;
 
   const topics = ev.raw_topics ?? [];

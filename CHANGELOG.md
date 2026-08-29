@@ -8,6 +8,73 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Remove redundant ALTER TABLE sac_asset from migration [#1](../../issues/1) ([`6f8e502`](../../commit/6f8e50223ef5b1573d7ba79cbc40b63f20ac775d))
+
+- Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
+
+Closes [#340](../../issues/340)
+
+
+- Read transfer amount from event data, not topic ([`cca26f5`](../../commit/cca26f51cf750174e537a9b33ad38b388b0d27a0))
+
+- Cap getEvents limit at MAX_PAGE (200) ([`d7b664f`](../../commit/d7b664f97f3dcb00b9fafa2df239b54b05ac2008))
+
+- Resolve issues [#368](../../issues/368), [#369](../../issues/369), [#370](../../issues/370), [#371](../../issues/371) ([`5bb3d82`](../../commit/5bb3d8232709de57da619097919841607a53fe28))
+
+- [#368](../../issues/368): sanitiseArg now bypasses truncation for valid strkeys,
+    raises MAX_ARG_DISPLAY_LEN to 128, and checks strkeys before
+    isSensitive to avoid incorrect redaction.
+  - [#369](../../issues/369): add GET /api/leaderboard?limit= endpoint with db.getLeaderboard,
+    Cache-Control max-age=60, and db.test coverage.
+  - [#370](../../issues/370): add init() warning and pool.query threading-model comments.
+  - [#371](../../issues/371): add dark mode toggle to Nav.tsx, persist to localStorage,
+    respect prefers-color-scheme, and add [data-theme="dark"] overrides
+
+
+- Resolve issues 360-363 ([`902bfea`](../../commit/902bfea55fe526fea2f8ea77f9f6d5ddcda2af29))
+
+[#360](../../issues/360): Fix getCursor to use parseInt with NaN guard and warning log for corrupted cursor values
+  [#361](../../issues/361): Add DELETE /api/contracts/:id endpoint with API_ADMIN_KEY auth and db.deleteContractMeta
+  [#362](../../issues/362): Log stack trace with method/path in error handler; export for testing
+  [#363](../../issues/363): Add VITE_COMMIT_SHA/VITE_APP_VERSION footer for version traceability
+
+  Closes [#360](../../issues/360)
+  Closes [#361](../../issues/361)
+  Closes [#362](../../issues/362)
+  Closes [#363](../../issues/363)
+
+
+- Resolve issues [#364](../../issues/364) [#365](../../issues/365) [#366](../../issues/366) [#367](../../issues/367) ([`f08630f`](../../commit/f08630ff089bbe57b8a63bab9f7d884dd732c46c))
+
+- [#364](../../issues/364): Replace hardcoded localhost URLs in e2e tests with env vars
+    (INDEXER_URL, FRONTEND_URL) and document in README
+  - [#365](../../issues/365): Add dump file size validation to backup.sh (>512 bytes)
+    and document in docs/backup.md
+  - [#366](../../issues/366): Add NETWORK_PASSPHRASE validation on indexer startup
+    against RPC network, with tests and README documentation
+  - [#367](../../issues/367): Rename button to 'Update metadata', add confirmation
+    dialog, and fix success message in ContractPage.tsx
+
+
+- Recreate RPC client after 3 consecutive errors ([`aa37cb7`](../../commit/aa37cb7c1518a19fc9b7aa5dd02cdeea1e86f0fe))
+
+Add error counting to the indexer main loop. After 3 consecutive RPC
+  failures (threshold: RPC_ERROR_THRESHOLD), the SorobanRpc.Server instance
+  is recreated to recover from potentially corrupted internal state. The
+  error counter resets on both success and recreation.
+
+  Closes [#421](../../issues/421)
+
+
+- Resolve issues 356 through 359 ([`dd43d38`](../../commit/dd43d382db7ab4fb9f10d1575482f930a2f39487))
+
+- Support card and table variants in Skeleton component to reduce CLS ([`051ab0d`](../../commit/051ab0d7ef7118c94d3d78f1c8fa595a561fbc8d))
+
+Closes [#342](../../issues/342)
+
+
+- Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -328,6 +395,48 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`1cfc643`](../../commit/1cfc643791d2431c4b3f97c87dac5028598c3f4f))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ac18f6a`](../../commit/ac18f6ad35b9b8c1358b31fd2c04014674741f5d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`3d8b1de`](../../commit/3d8b1de4e6e2193be5de801c5a4b5ef9e29302e5))
+
+- Auto-update CHANGELOG.md [skip ci] ([`7440e83`](../../commit/7440e8322c7b0e7da8a31ffbbb1ddf619a40a893))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ededb6b`](../../commit/ededb6b93522b02e0e225b63b970350d310dd0c8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`e109c95`](../../commit/e109c95990533074f7b32ecaac5192d1794f905d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`14b61dc`](../../commit/14b61dc9a86124722b4230ee3a22b438efc171ec))
+
+- Auto-update CHANGELOG.md [skip ci] ([`09a1254`](../../commit/09a12541468238877ddb9c8a5e8ef538f428b408))
+
+- Auto-update CHANGELOG.md [skip ci] ([`78cf7e2`](../../commit/78cf7e216964755ff68d176d0b0e70c01361145c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`0978cb8`](../../commit/0978cb8811912f61403f5cb15199f5a24f4160ef))
+
+- Auto-update CHANGELOG.md [skip ci] ([`96bef84`](../../commit/96bef846f53002d3c8d637e795396fe6b30f12b1))
+
+- Auto-update CHANGELOG.md [skip ci] ([`73a2fc3`](../../commit/73a2fc32d98f0fba1cc9a0561c9f34d58474edf8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`6f65ea6`](../../commit/6f65ea670192e67b9c9c7566219008543fd8901b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`8b37bbf`](../../commit/8b37bbf1fd37a748ed94303320ae8130dc0262bf))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c6c7c64`](../../commit/c6c7c64688bc20d8b0af135b7acc36e4457b79c7))
+
+- Add emergency recovery section about permanent key loss ([`1d8f802`](../../commit/1d8f802104267b308e5ab6bf4842894e4496403e))
+
+- Auto-update CHANGELOG.md [skip ci] ([`3651fd6`](../../commit/3651fd660a28416bb42b776a4052bff601c2b049))
+
+- Auto-update CHANGELOG.md [skip ci] ([`806da8f`](../../commit/806da8ff966e0f1d892755508e3d69f1edd2711d))
+
+- Add snapshot update instructions ([`7f6186a`](../../commit/7f6186a78c6a01dd0e38b92dbce373676225c497))
+
+- Auto-update CHANGELOG.md [skip ci] ([`7f30f84`](../../commit/7f30f845bcce546a73488e15f378a497ee61c3d5))
+
+- Auto-update CHANGELOG.md [skip ci] ([`98b9608`](../../commit/98b9608228bb49d4a2ab8bbefeda8ea1139c0da0))
+
 - Auto-update CHANGELOG.md [skip ci] ([`b86cfe1`](../../commit/b86cfe10fd81adbe717a988f74b3e8febdc19f2e))
 
 - Auto-update CHANGELOG.md [skip ci] ([`3095c76`](../../commit/3095c7652a9942fcbfc23f7a7435495cd275d109))
@@ -426,6 +535,45 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add GET /api/events/stream SSE endpoint and streamEvents frontend client helper ([`8b09874`](../../commit/8b098743013c3ade80ebfcb8bf86d42fe0b385b3))
+
+Closes [#413](../../issues/413)
+
+
+- Add Kubernetes deployment manifests and guide for indexer and frontend ([`8d4b8d3`](../../commit/8d4b8d35d79bf38976c77b6fe25c772635cee869))
+
+Closes [#341](../../issues/341)
+
+
+- Add Contracts directory page with debounced search ([`4a1062a`](../../commit/4a1062a207c67ec154515e7f038dec98ce460b3c))
+
+- Add Contracts link to nav ([`5198fac`](../../commit/5198fac464dc43898374b96135542069b6eeb18c))
+
+- Add /contracts route ([`c1cc83a`](../../commit/c1cc83ab64192a625fba7af771ae18882f628e99))
+
+- Add frontend api.contracts() search helper ([`f880b57`](../../commit/f880b57dc0284ba64de3bf0296e7893002dcdadb))
+
+- Add GET /api/contracts list endpoint with q param ([`49ee764`](../../commit/49ee764a893a5c9798c6b9b1a6957c43688bcef8))
+
+- Add db.getContracts with name/description search ([`480e135`](../../commit/480e135d8a457ac459b77e8d4933157fd217d373))
+
+- Add transfer_from case to buildDescription ([`dd4d9dd`](../../commit/dd4d9ddc6567d86df7956fd9fa05d3b204dbb174))
+
+- Add make db target for PostgreSQL container ([`c91e6ee`](../../commit/c91e6ee080d6e4a467917e53cf0b778640500ec2))
+
+- Add ContractPage ABI registration form for new contracts ([`cb7031c`](../../commit/cb7031ca20af229eb5cda50f877135700224371b))
+
+When navigating to an unregistered contract ID, render a registration form
+  (name, description, functions) instead of the static 'Contract not found.'
+  message. Submitting the form calls api.registerContract() and invalidates
+  the contract query cache so the metadata view renders immediately.
+
+  - Added RegistrationForm component with field validation
+  - Name field is required; description and functions are optional
+  - Functions list supports add/remove with name + description per entry
+  - Existing registered contracts are unaffected
+
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
@@ -630,6 +778,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 
 ### Testing
+
+- Transfer sends amount in event data per SEP-41 ([`5d467db`](../../commit/5d467db96421d79e171922ec8155cdbdfd227e2a))
 
 - Add WASM sandbox integration test stubs ([`34a2dba`](../../commit/34a2dba4cf9dec0223758b8b5891a33584a9b96a))
 
