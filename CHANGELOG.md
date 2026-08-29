@@ -406,6 +406,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`d89fb76`](../../commit/d89fb7628c3ba5532af14ce9ef316d7dfe9588d4))
+
 - Auto-update CHANGELOG.md [skip ci] ([`41a354c`](../../commit/41a354c38724e939a800fdea42bfb4311f7d7961))
 
 - Auto-update CHANGELOG.md [skip ci] ([`86504f4`](../../commit/86504f4872c6620fe9ff86177201dfea73b75e14))
@@ -554,6 +556,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add Docker Compose health checks for indexer and frontend services ([`dd0f0b0`](../../commit/dd0f0b07d3ddc3ec524bcdc9ae34a0963e84b738))
 
 - Add GET /api/events/stream SSE endpoint and streamEvents frontend client helper ([`8b09874`](../../commit/8b098743013c3ade80ebfcb8bf86d42fe0b385b3))
 
