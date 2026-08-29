@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
+
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
 
 - Add accessible aria-label prop to CopyButton ([`e8e173e`](../../commit/e8e173ea7e7021dfa3324c4caf92b32858014b27))
@@ -405,6 +407,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`649b310`](../../commit/649b3109eea6a63dc73088f0a75df4ea6f0f5732))
 
 - Auto-update CHANGELOG.md [skip ci] ([`07313ae`](../../commit/07313ae381624756d33f8d90290a979d3b03e70e))
 
