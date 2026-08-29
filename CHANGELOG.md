@@ -92,6 +92,8 @@ Closes [#342](../../issues/342)
 
 - Make database connection pool size configurable via DATABASE_POOL_SIZE ([`a1cdc78`](../../commit/a1cdc7817ef370e85dc2eadcf3e5b687576eef1d))
 
+- Enforce 1000ms minimum for POLL_MS ([`f3db06e`](../../commit/f3db06e2a4202a04756c668f14cb0437744f7a0b))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -411,6 +413,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`1cca5f8`](../../commit/1cca5f82a79c2ef73ee478b8327a4dee1b577c3b))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a2a6626`](../../commit/a2a6626612282c1a3671cf1fd77a7998a74e43f0))
 
