@@ -8,7 +8,9 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { errorHandler } from "../src/api.js";
+import { errorHandler, validateContractPayload } from "../src/api.js";
+
+const VALID_CONTRACT_ID = `C${"A".repeat(55)}`;
 
 function createMockRes() {
   return {
@@ -100,5 +102,45 @@ describe("errorHandler middleware", () => {
 
     assert.equal(statusCalled, false, "should not call res.status() when headersSent");
     assert.equal(jsonCalled, false, "should not call res.json() when headersSent");
+  });
+});
+
+describe("validateContractPayload", () => {
+  it("requires id", () => {
+    const err = validateContractPayload({ name: "Foo" });
+    assert.equal(err, "id is required");
+  });
+
+  it("rejects an id that does not match the contract strkey pattern", () => {
+    const err = validateContractPayload({ id: "not-a-valid-id", name: "Foo" });
+    assert.equal(err, "id is required");
+  });
+
+  it("requires name", () => {
+    const err = validateContractPayload({ id: VALID_CONTRACT_ID });
+    assert.equal(err, "name is required");
+  });
+
+  it("rejects a blank name", () => {
+    const err = validateContractPayload({ id: VALID_CONTRACT_ID, name: "   " });
+    assert.equal(err, "name is required");
+  });
+
+  it("rejects functions that are not an array", () => {
+    const err = validateContractPayload({
+      id: VALID_CONTRACT_ID,
+      name: "Foo",
+      functions: "not-an-array",
+    });
+    assert.equal(err, "functions must be an array");
+  });
+
+  it("accepts a valid payload", () => {
+    const err = validateContractPayload({
+      id: VALID_CONTRACT_ID,
+      name: "Foo",
+      functions: [],
+    });
+    assert.equal(err, null);
   });
 });

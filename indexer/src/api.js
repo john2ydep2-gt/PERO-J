@@ -46,7 +46,30 @@ export function errorHandler(err, req, res, _next) {
   res.status(500).json({ error: err.message || "Internal Server Error" });
 }
 
-export function startApi() {
+const CONTRACT_ID_PATTERN = /^C[A-Z0-9]{55}$/;
+
+/**
+ * Validates a POST /api/contracts request body before it reaches the
+ * database, so malformed input returns a clean 400 instead of an
+ * obscure PostgreSQL error.
+ *
+ * @param {Record<string, unknown>} body
+ * @returns {string | null} an error message, or null if valid
+ */
+export function validateContractPayload(body) {
+  if (typeof body.id !== "string" || !CONTRACT_ID_PATTERN.test(body.id)) {
+    return "id is required";
+  }
+  if (typeof body.name !== "string" || body.name.trim() === "") {
+    return "name is required";
+  }
+  if (body.functions !== undefined && !Array.isArray(body.functions)) {
+    return "functions must be an array";
+  }
+  return null;
+}
+
+export function createApp() {
   const app = express();
   app.use(express.json());
 
@@ -218,6 +241,11 @@ export function startApi() {
   app.post(
     "/api/contracts",
     asyncHandler(async (req, res) => {
+      const validationError = validateContractPayload(req.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
       const existing = await db.getContractMeta(req.body.id);
       const registeredBy = req.body.registered_by ?? existing?.registered_by;
 
