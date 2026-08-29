@@ -62,6 +62,41 @@ Use descriptive branch names with the following prefixes:
 
 Use lowercase letters, hyphens, and be concise (< 50 characters).
 
+## How to add a new event decoder
+
+Event descriptions are built in [`indexer/src/decoder.js`](indexer/src/decoder.js).
+Add a case to `buildDescription` when a registered ABI function needs a
+human-readable description. For example, a `claim` event whose topics contain
+the claimant and amount could be added like this:
+
+```js
+case "claim": {
+   const [claimant, amount] = args;
+   return `Address ${fmt(claimant)} claimed ${amount} on ${contractName}`;
+}
+```
+
+1. Confirm the function name and argument order in the contract ABI.
+2. Add the `case "claim"` branch to `buildDescription`, keeping the fallback
+    in `default` for unrecognised functions.
+3. Add a test in [`indexer/test/decoder.test.js`](indexer/test/decoder.test.js).
+    Build a raw event with the function symbol and XDR-encoded argument topics,
+    register a matching ABI function, then assert the description contains the
+    expected wording and values.
+4. Run `npm test` from `indexer/`.
+
+ABI fixtures in [`indexer/fixtures/`](indexer/fixtures/) are JSON objects with
+the contract `id`, display `name`, optional `description`, and a `functions`
+array. Each function entry has a `name` and its parameter metadata, for example:
+
+```json
+{
+   "id": "C...",
+   "name": "Example",
+   "functions": [{ "name": "claim", "params": [{ "name": "claimant", "type": "address" }] }]
+}
+```
+
 ## Commit Message Format
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
