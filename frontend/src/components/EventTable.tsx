@@ -69,14 +69,33 @@ export default function EventTable({ events }: Props) {
                       textOverflow: isExpanded ? "clip" : "ellipsis",
                       whiteSpace: isExpanded ? "normal" : "nowrap",
                       wordBreak: isExpanded ? "break-word" : "normal",
-                      cursor: isLongDescription ? "pointer" : "default",
                     }}
                     title={ev.description}
-                    onClick={() => isLongDescription && setExpandedSeq(isExpanded ? null : ev.seq)}
                   >
-                    {ev.description}
-                    {isLongDescription && !isExpanded && (
-                      <span style={{ marginLeft: 8, color: "var(--muted)", fontSize: 12 }}>…</span>
+                    <span>{ev.description}</span>
+                    {isLongDescription && (
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? "Collapse description" : "Expand description"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedSeq(isExpanded ? null : ev.seq);
+                        }}
+                        style={{
+                          marginLeft: 8,
+                          padding: "2px 6px",
+                          fontSize: 10,
+                          cursor: "pointer",
+                          background: "none",
+                          border: "1px solid var(--border)",
+                          borderRadius: 4,
+                          color: "var(--muted)",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {isExpanded ? "▲" : "▼"}
+                      </button>
                     )}
                   </td>
                 </tr>
