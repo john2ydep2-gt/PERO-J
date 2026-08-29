@@ -94,6 +94,40 @@ Closes [#342](../../issues/342)
 
 - Enforce 1000ms minimum for POLL_MS ([`f3db06e`](../../commit/f3db06e2a4202a04756c668f14cb0437744f7a0b))
 
+- Drop glob from node --test and add libudev-dev for soroban-cli ([`a2aa267`](../../commit/a2aa267698ef173a08117616ea65aabfcb1e868f))
+
+- Fix indexer test glob, soroban-cli install, description limit guard, and update snapshots ([`590bf53`](../../commit/590bf5392a776f264f34bece7cab03fdbea26339))
+
+- indexer/package.json: use single-quoted glob 'test/*.test.js' so node --test
+    works on CI (the unquoted glob was shell-expanded before node saw it)
+  - .github/workflows/ci.yml: install libdbus-1-dev and pkg-config before
+    cargo install soroban-cli (required system deps on ubuntu-latest)
+  - contracts/explorer/src/lib.rs: add MAX_DESCRIPTION_LEN guard in
+    submit_event and fix two test helpers to use the setup!() macro
+  - contracts/explorer/test_snapshots: regenerate all affected snapshots
+    after the lib.rs changes (Admin key moved to persistent ledger entries)
+
+
+- Use npm test in indexer job and add missing isMissingFunctionError ([`41fa9d6`](../../commit/41fa9d6786af3408d76621187d1631b08be35f3b))
+
+Two related issues prevented the indexer CI job from passing:
+
+  1. .github/workflows/ci.yml used `node --test test/` which fails because
+     Node.js cannot load a directory as a module. The indexer package.json
+     'test' script already has the correct invocation
+     (`node --test test/**/*.test.js`), so the fix is to call `npm test`.
+
+  2. indexer/src/validateSep41.js called `isMissingFunctionError()` on line 121
+     but the function was never defined in the file. The missing function caused
+     a ReferenceError that was silently swallowed by the catch block in
+     validateSep41(), making every SEP-41 function check return false and
+     causing the 'execution errors treated as present' test to fail.
+     Fix: add the isMissingFunctionError() definition between isExecutionError()
+     and isRateLimitError().
+
+  After both fixes: 85 tests, 27 suites, 0 failures
+
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -413,6 +447,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`552db35`](../../commit/552db35d00e929ba3a3999768af66432465a3878))
 
 - Auto-update CHANGELOG.md [skip ci] ([`dad80c0`](../../commit/dad80c06e149e632f1a7c8fa6ea96e6680c9ff0f))
 
