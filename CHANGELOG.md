@@ -414,6 +414,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`dad80c0`](../../commit/dad80c06e149e632f1a7c8fa6ea96e6680c9ff0f))
+
 - Auto-update CHANGELOG.md [skip ci] ([`1cca5f8`](../../commit/1cca5f82a79c2ef73ee478b8327a4dee1b577c3b))
 
 - Auto-update CHANGELOG.md [skip ci] ([`a2a6626`](../../commit/a2a6626612282c1a3671cf1fd77a7998a74e43f0))
@@ -639,6 +641,8 @@ When navigating to an unregistered contract ID, render a registration form
 - Add Blend protocol ABI fixture and decoders for supply, borrow, repay, liquidate ([`c1afa70`](../../commit/c1afa7024c7b2fc849fdb235d6dd41168a7cfa79))
 
 - Add GET /api/tokens/:id/metadata endpoint for SEP-41 token info ([`cf64494`](../../commit/cf644946ab35832fa9aac190439f167a8d816dfa))
+
+- Add GET /api/contracts/:id/events endpoint ([#349](../../issues/349)) ([`dd1586e`](../../commit/dd1586ec51b4eaeba5fba15b1db67ea59d00fcda))
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
