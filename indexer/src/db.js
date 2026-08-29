@@ -277,6 +277,39 @@ export const db = {
   },
 
   /**
+   * Return a paginated list of registered contracts, optionally filtered by a
+   * free-text query across name and description.
+   *
+   * @param {object}  [opts]
+   * @param {string}  [opts.q]       - Case-insensitive substring search on name/description.
+   * @param {number}  [opts.page=1]  - 1-based page number.
+   * @param {number}  [opts.limit=25] - Rows per page.
+   * @returns {Promise<{ contracts: ContractMeta[], total: number, page: number, limit: number }>}
+   */
+  async getContracts({ q, page = 1, limit = 25 } = {}) {
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 25;
+    const conditions = [];
+    const params = [];
+    if (q) {
+      params.push(`%${q}%`);
+      conditions.push(`(name ILIKE $${params.length} OR description ILIKE $${params.length})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const countRes = await pool.query(`SELECT COUNT(*) FROM contracts ${where}`, params);
+    const total = parseInt(countRes.rows[0].count, 10);
+
+    const offset = (pageNum - 1) * limitNum;
+    const { rows } = await pool.query(
+      `SELECT * FROM contracts ${where}
+       ORDER BY name ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limitNum, offset]
+    );
+    return { contracts: rows, total, page: pageNum, limit: limitNum };
+  },
+
+  /**
    * Aggregate transfer volume for a contract over the last 24 hours.
    * Amounts are stored as raw strings in raw_data; we cast via NUMERIC to
    * avoid floating-point errors and return a BigInt-safe string.

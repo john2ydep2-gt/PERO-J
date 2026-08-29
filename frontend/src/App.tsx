@@ -3,6 +3,7 @@ import Nav from "./components/Nav";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
+import ContractsPage from "./pages/ContractsPage";
 import ContractPage from "./pages/ContractPage";
 import WalletPage from "./pages/WalletPage";
 import EventPage from "./pages/EventPage";
@@ -18,6 +19,7 @@ export default function App() {
         >
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/contract/:id" element={<ContractPage />} />
             <Route path="/wallet/:address" element={<WalletPage />} />
             <Route path="/event/:seq" element={<EventPage />} />
