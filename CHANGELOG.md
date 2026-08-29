@@ -8,6 +8,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
+
+- Add accessible aria-label prop to CopyButton ([`e8e173e`](../../commit/e8e173ea7e7021dfa3324c4caf92b32858014b27))
+
 - Remove redundant ALTER TABLE sac_asset from migration [#1](../../issues/1) ([`6f8e502`](../../commit/6f8e50223ef5b1573d7ba79cbc40b63f20ac775d))
 
 - Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
@@ -74,6 +78,13 @@ Closes [#342](../../issues/342)
 
 
 - Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
+
+- Validate seq param in EventPage to prevent NaN API request ([`4a0f8cd`](../../commit/4a0f8cd5fd5ea8dcd5fa779af300356654bd5913))
+
+If a user navigates to /event/abc, Number('abc') evaluates to NaN, which
+  was being forwarded directly to GET /api/events/NaN causing a 400 error
+  and a generic 'Event not found.' message with no explanation.
+
 
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
@@ -394,6 +405,12 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`86504f4`](../../commit/86504f4872c6620fe9ff86177201dfea73b75e14))
+
+- Auto-update CHANGELOG.md [skip ci] ([`794b50e`](../../commit/794b50e925272991eb7fb7a6b7850949f3049229))
+
+- Auto-update CHANGELOG.md [skip ci] ([`02f408c`](../../commit/02f408cffe1281391e353701550a61a8e4f9c4e0))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1cfc643`](../../commit/1cfc643791d2431c4b3f97c87dac5028598c3f4f))
 

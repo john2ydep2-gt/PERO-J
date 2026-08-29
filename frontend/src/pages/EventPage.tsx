@@ -5,12 +5,21 @@ import { api } from "../api";
 import Skeleton from "../components/Skeleton";
 import CopyButton from "../components/CopyButton";
 
+/** Returns true only when the string represents a non-negative integer. */
+function isValidSeq(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
 export default function EventPage() {
-  const { seq = "0" } = useParams();
+  const { seq = "" } = useParams();
+
+  const seqIsValid = isValidSeq(seq);
+  const seqNum = seqIsValid ? Number(seq) : NaN;
 
   const { data: ev, isLoading } = useQuery({
     queryKey: ["event", seq],
-    queryFn: () => api.event(Number(seq)),
+    queryFn: () => api.event(seqNum),
+    enabled: seqIsValid,
   });
 
   useEffect(() => {
@@ -35,8 +44,8 @@ export default function EventPage() {
         <Row label="Function"    value={ev.function} badge />
         <Row label="Ledger"      value={ev.ledger.toLocaleString()} />
         {ev.created_at && <Row label="Time" value={new Date(ev.created_at).toUTCString()} />}
-        <Row label="Contract" value={<Link to={`/contract/${ev.contract_id}`}>{ev.contract_id}</Link>} action={<CopyButton value={ev.contract_id} size="small" />} />
-        {ev.tx_hash && <Row label="Tx Hash" value={ev.tx_hash} mono action={<CopyButton value={ev.tx_hash} size="small" />} />}
+        <Row label="Contract" value={<Link to={`/contract/${ev.contract_id}`}>{ev.contract_id}</Link>} action={<CopyButton value={ev.contract_id} size="small" ariaLabel="Copy contract ID" />} />
+        {ev.tx_hash && <Row label="Tx Hash" value={ev.tx_hash} mono action={<CopyButton value={ev.tx_hash} size="small" ariaLabel="Copy transaction hash" />} />}
         {ev.raw_topics.length > 0 && (
           <Row label="Topics" value={ev.raw_topics.join(", ")} mono />
         )}
