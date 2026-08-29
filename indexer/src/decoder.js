@@ -105,8 +105,9 @@ function buildDescription(fn, args, data, contractName) {
       return `Address ${fmt(from)} swapped ${amtIn} ${tokenIn} → ${amtOut} ${tokenOut} on ${contractName}`;
     }
     case "transfer": {
-      const [from, to, amount, token] = args;
-      return `Address ${fmt(from)} transferred ${amount} ${token ?? ""} to ${fmt(to)} on ${contractName}`;
+      const [from, to] = args;
+      const amount = data;
+      return `Address ${fmt(from)} transferred ${amount} to ${fmt(to)} on ${contractName}`;
     }
     case "mint": {
       const [to, amount, token] = args;
