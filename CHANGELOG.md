@@ -75,6 +75,13 @@ Closes [#342](../../issues/342)
 
 - Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
 
+- Validate seq param in EventPage to prevent NaN API request ([`4a0f8cd`](../../commit/4a0f8cd5fd5ea8dcd5fa779af300356654bd5913))
+
+If a user navigates to /event/abc, Number('abc') evaluates to NaN, which
+  was being forwarded directly to GET /api/events/NaN causing a 400 error
+  and a generic 'Event not found.' message with no explanation.
+
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -394,6 +401,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`02f408c`](../../commit/02f408cffe1281391e353701550a61a8e4f9c4e0))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1cfc643`](../../commit/1cfc643791d2431c4b3f97c87dac5028598c3f4f))
 
