@@ -67,7 +67,7 @@ pg.Pool.prototype.query = async (sql, params) => {
 pg.Pool.prototype.end = async () => {};
 
 // Import AFTER patching
-import { db } from "../src/db.js";
+import { db, getPoolSize } from "../src/db.js";
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
