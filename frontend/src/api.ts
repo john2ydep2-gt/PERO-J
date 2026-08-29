@@ -36,6 +36,13 @@ export interface EventsResponse {
   limit: number;
 }
 
+export interface ContractsResponse {
+  contracts: ContractMeta[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 async function get<T>(path: string): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -75,6 +82,13 @@ export const api = {
     return get<EventsResponse>(`/events?${q}`);
   },
   event:            (seq: number)                         => get<DecodedEvent>(`/events/${seq}`),
+  contracts:        (params: { q?: string; page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params.q)       q.set("q", params.q);
+    if (params.page)    q.set("page", String(params.page));
+    if (params.limit)   q.set("limit", String(params.limit));
+    return get<ContractsResponse>(`/contracts?${q}`);
+  },
   contract:         (id: string)                          => get<ContractMeta>(`/contracts/${id}`),
   wallet:           (address: string, page: number = 1)   => get<WalletEventsResponse>(`/wallet/${address}?page=${page}`),
   registerContract: (meta: ContractMeta)                  => post<{ ok: boolean }>("/contracts", meta),

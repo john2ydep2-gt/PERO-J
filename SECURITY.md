@@ -67,6 +67,30 @@ We do not offer monetary bug bounties at this time, but we recognize responsible
 
 ## Security Best Practices
 
+### Admin Transfer Procedure
+
+`transfer_admin` intentionally requires authorization from both the current
+admin and the new admin before ownership changes. This prevents a mistyped
+address from permanently locking the contract, but it means the new admin must
+co-sign the same transaction. The new admin does not need to be online at the
+time the transaction is created; the transaction can be prepared and shared
+for signing.
+
+For a handoff using a hardware wallet or multi-signature account:
+
+1. Build an invoke transaction calling `transfer_admin` with the current admin
+   and new admin addresses.
+2. Simulate and prepare the transaction with the network's Soroban tooling.
+3. Have the current admin sign its authorization entry.
+4. Share the prepared transaction or auth envelope with the new admin. Have
+   the new admin sign its authorization entry; for a multi-signature account,
+   collect the signatures required by that account's signer policy.
+5. Combine the signatures, verify both authorization entries and the target
+   address, then submit the transaction to the network.
+
+Do not submit until both parties have verified the new address. A failed or
+expired prepared transaction must be rebuilt and signed again.
+
 ### For Users
 
 - **Do not share your Stellar private keys** with any service, including PERO-J
@@ -84,6 +108,33 @@ We do not offer monetary bug bounties at this time, but we recognize responsible
 ## Security Audits
 
 PERO-J has not undergone a third-party security audit. The project is currently in **testnet development**. A formal audit is planned before mainnet deployment as outlined in [ROADMAP.md](ROADMAP.md).
+
+## Emergency Recovery
+
+### Key Loss is Permanent
+
+If you lose access to your Stellar private key (secret key), there is **no way to recover it**. Stellar does not provide any mechanism for key recovery or account restoration.
+
+- **No seed phrase recovery** — Unlike some blockchains, Stellar accounts are secured by a single private key
+- **No administrative override** — There is no backdoor or admin key that can recover lost accounts
+- **No support recovery** — Stellar development support cannot recover lost keys
+- **Contract redeployment required** — If an admin key is lost, the only option is to deploy a new contract instance
+
+### Recommendations
+
+- **Backup your keys securely** — Store private keys in multiple secure locations
+- **Use hardware wallets** — For significant funds, use hardware wallet solutions
+- **Test key recovery** — Verify you can access your account from a backup before storing value
+- **Document key locations** — Keep a secure record of where keys are stored (not the keys themselves)
+
+### What to Do If You Lose a Key
+
+1. **Immediately revoke access** — If possible, transfer assets to a new secure account
+2. **Deploy new contract** — If admin key is lost, deploy a new contract with a new admin key
+3. **Update configurations** — Update all references to the old contract address
+4. **Notify stakeholders** — Inform users of the contract address change
+
+**Warning:** Any assets or contracts associated with a lost key are permanently inaccessible. This is by design for security — there is no central authority that can recover lost keys.
 
 ## Contact
 

@@ -55,8 +55,12 @@ export default function WalletPage() {
           : !isValidAddress
           ? <p style={{ color: "var(--muted)" }}>Invalid Stellar address.</p>
           : isLoading
-          ? <Skeleton variant="table" />
-          : <EventTable events={events} />}
+          ? <Skeleton />
+          : <EventTable
+            events={events}
+            emptyMessage="No events found for this address."
+            emptySubtitle="This address has no indexed events."
+          />}
       </div>
 
       {/* Pagination */}

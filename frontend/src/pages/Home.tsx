@@ -25,6 +25,7 @@ export default function Home() {
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
+  const hasActiveFilter = Boolean((useCustom ? customFn : fnFilter).trim());
 
   const handleFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -88,7 +89,11 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <EventTable events={events} />
+          <EventTable
+            events={events}
+            emptyMessage={hasActiveFilter ? "No events match your current filters." : undefined}
+            emptySubtitle={hasActiveFilter ? "Try adjusting your filter criteria." : undefined}
+          />
         )}
       </div>
 
