@@ -61,6 +61,11 @@ Add error counting to the indexer main loop. After 3 consecutive RPC
 
 - Resolve issues 356 through 359 ([`dd43d38`](../../commit/dd43d382db7ab4fb9f10d1575482f930a2f39487))
 
+- Support card and table variants in Skeleton component to reduce CLS ([`051ab0d`](../../commit/051ab0d7ef7118c94d3d78f1c8fa595a561fbc8d))
+
+Closes [#342](../../issues/342)
+
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -380,6 +385,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`e109c95`](../../commit/e109c95990533074f7b32ecaac5192d1794f905d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`14b61dc`](../../commit/14b61dc9a86124722b4230ee3a22b438efc171ec))
 
