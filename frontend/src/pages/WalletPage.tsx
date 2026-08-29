@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { StrKey } from "@stellar/stellar-sdk";
@@ -11,6 +11,14 @@ export default function WalletPage() {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState(address);
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (address) {
+      document.title = `Wallet ${address} - Soroban Smart Block Explorer`;
+    } else {
+      document.title = "Wallet History - Soroban Smart Block Explorer";
+    }
+  }, [address]);
 
   const isValidAddress = StrKey.isValidEd25519PublicKey(address);
 
@@ -56,7 +64,11 @@ export default function WalletPage() {
           ? <p style={{ color: "var(--muted)" }}>Invalid Stellar address.</p>
           : isLoading
           ? <Skeleton />
-          : <EventTable events={events} />}
+          : <EventTable
+            events={events}
+            emptyMessage="No events found for this address."
+            emptySubtitle="This address has no indexed events."
+          />}
       </div>
 
       {/* Pagination */}

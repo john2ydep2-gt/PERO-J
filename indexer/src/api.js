@@ -1,8 +1,10 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
+import { eventEmitter } from "./events.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -10,18 +12,43 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
+/**
+ * Admin-key authentication middleware for privileged operations.
+ * Reads the expected key from the API_ADMIN_KEY environment variable
+ * and validates it against an Authorization: Bearer <key> header.
+ */
+const requireAdminKey = (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1] : null;
+  const expected = process.env.API_ADMIN_KEY;
+  if (!expected || !token || token !== expected) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+};
+
+/**
+ * Global Express error-handling middleware.
+ * Logs the full stack trace together with the request method and path
+ * so that unhandled errors are debuggable in production logs.
+ *
+ * @param {Error} err
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} _next
+ */
+export function errorHandler(err, req, res, _next) {
+  console.error("API Error:", { method: req.method, path: req.path, stack: err.stack });
+  if (res.headersSent) {
+    return;
+  }
+  res.status(500).json({ error: err.message || "Internal Server Error" });
+}
+
 export function startApi() {
   const app = express();
   app.use(express.json());
-
-  app.use(
-    rateLimit({
-      windowMs: 60_000,
-      max: 100,
-      standardHeaders: true,
-      legacyHeaders: false,
-    })
-  );
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
   app.get(
@@ -81,11 +108,33 @@ export function startApi() {
     })
   );
 
+  // Rate limiter applies to /api/* routes to protect endpoints against DoS while exempting /health and /ready probes
+  app.use(
+    "/api",
+    rateLimit({
+      windowMs: 60_000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  );
+
   // GET /api/functions — distinct function names across all events
   app.get(
     "/api/functions",
     asyncHandler(async (req, res) => {
       const result = await db.getDistinctFunctions();
+      res.json(result);
+    })
+  );
+
+  // GET /api/leaderboard?limit=10 — top contracts by event volume
+  app.get(
+    "/api/leaderboard",
+    asyncHandler(async (req, res) => {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+      const result = await db.getLeaderboard(limit);
+      res.setHeader("Cache-Control", "public, max-age=60");
       res.json(result);
     })
   );
@@ -104,6 +153,26 @@ export function startApi() {
     })
   );
 
+  // GET /api/events/stream — Server-Sent Events endpoint for live event feed
+  app.get("/api/events/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const onEvent = (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    eventEmitter.on("event", onEvent);
+
+    req.on("close", () => {
+      eventEmitter.off("event", onEvent);
+      res.end();
+    });
+  });
+
   // GET /api/events/:seq
   app.get(
     "/api/events/:seq",
@@ -118,6 +187,18 @@ export function startApi() {
         return res.status(404).json({ error: "Not found" });
       }
       res.json(ev);
+    })
+  );
+
+  // GET /api/contracts?q=&page=&limit= — paginated list of registered contracts,
+  // optionally filtered by name/description via case-insensitive search.
+  app.get(
+    "/api/contracts",
+    asyncHandler(async (req, res) => {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 25;
+      const result = await db.getContracts({ q: req.query.q, page, limit });
+      res.json(result);
     })
   );
 
@@ -148,6 +229,20 @@ export function startApi() {
 
       await db.upsertContractMeta({ ...req.body, registered_by: registeredBy });
       res.status(201).json({ ok: true });
+    })
+  );
+
+  // DELETE /api/contracts/:id — remove contract ABI metadata (admin-authenticated)
+  app.delete(
+    "/api/contracts/:id",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const existing = await db.getContractMeta(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      await db.deleteContractMeta(req.params.id);
+      res.status(204).send();
     })
   );
 
@@ -196,18 +291,36 @@ export function startApi() {
     })
   );
 
+  // GET /api/tokens/:id/metadata — SEP-41 token metadata
+  app.get(
+    "/api/tokens/:id/metadata",
+    asyncHandler(async (req, res) => {
+      const contractId = req.params.id;
+      try {
+        const meta = await fetchTokenMetadata(contractId);
+        res.json({
+          contract_id: contractId,
+          name: meta.name,
+          symbol: meta.symbol,
+          decimals: meta.decimals,
+        });
+      } catch {
+        res.status(404).json({ error: "Token not found or not SEP-41 compliant" });
+      }
+    })
+  );
+
   app.use((req, res) => {
     res.status(404).json({ error: "Not found" });
   });
 
-  // Global Error Handler Middleware
-  app.use((err, req, res, _next) => {
-    console.error("API Error:", err);
-    if (res.headersSent) {
-      return;
-    }
-    res.status(500).json({ error: err.message || "Internal Server Error" });
-  });
+  app.use(errorHandler);
 
-  app.listen(PORT, () => console.log(`API listening on :${PORT}`));
+  return app;
 }
+
+export function startApi(port = PORT) {
+  const app = createApp();
+  return app.listen(port, () => console.log(`API listening on :${port}`));
+}
+
