@@ -59,6 +59,8 @@ Add error counting to the indexer main loop. After 3 consecutive RPC
   Closes [#421](../../issues/421)
 
 
+- Resolve issues 356 through 359 ([`dd43d38`](../../commit/dd43d382db7ab4fb9f10d1575482f930a2f39487))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -378,6 +380,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`14b61dc`](../../commit/14b61dc9a86124722b4230ee3a22b438efc171ec))
 
 - Auto-update CHANGELOG.md [skip ci] ([`09a1254`](../../commit/09a12541468238877ddb9c8a5e8ef538f428b408))
 
