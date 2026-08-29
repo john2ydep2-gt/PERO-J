@@ -291,6 +291,25 @@ export function startApi() {
     })
   );
 
+  // GET /api/tokens/:id/metadata — SEP-41 token metadata
+  app.get(
+    "/api/tokens/:id/metadata",
+    asyncHandler(async (req, res) => {
+      const contractId = req.params.id;
+      try {
+        const meta = await fetchTokenMetadata(contractId);
+        res.json({
+          contract_id: contractId,
+          name: meta.name,
+          symbol: meta.symbol,
+          decimals: meta.decimals,
+        });
+      } catch {
+        res.status(404).json({ error: "Token not found or not SEP-41 compliant" });
+      }
+    })
+  );
+
   app.use((req, res) => {
     res.status(404).json({ error: "Not found" });
   });
