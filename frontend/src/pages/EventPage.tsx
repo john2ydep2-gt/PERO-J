@@ -5,12 +5,21 @@ import { api } from "../api";
 import Skeleton from "../components/Skeleton";
 import CopyButton from "../components/CopyButton";
 
+/** Returns true only when the string represents a non-negative integer. */
+function isValidSeq(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
 export default function EventPage() {
-  const { seq = "0" } = useParams();
+  const { seq = "" } = useParams();
+
+  const seqIsValid = isValidSeq(seq);
+  const seqNum = seqIsValid ? Number(seq) : NaN;
 
   const { data: ev, isLoading } = useQuery({
     queryKey: ["event", seq],
-    queryFn: () => api.event(Number(seq)),
+    queryFn: () => api.event(seqNum),
+    enabled: seqIsValid,
   });
 
   useEffect(() => {
