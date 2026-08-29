@@ -49,9 +49,10 @@ const XLM_SAC_ID = new Contract(
 
 // Unique valid contract IDs (derived from deterministic seeds) — one per test
 // so that the 60-second LRU cache in decoder.js never bleeds between tests.
-const [C1, C2, C3, C4, C5, C6, C7, C8] = [1, 2, 3, 4, 5, 6, 7, 8].map((i) =>
-  StrKey.encodeContract(Buffer.alloc(32, i))
-);
+const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+].map((i) => StrKey.encodeContract(Buffer.alloc(32, i)));
+
 
 // ── mock setup ────────────────────────────────────────────────────────────────
 // Import db first, replace getContractMeta, then import decode.
@@ -152,7 +153,81 @@ describe("decode()", () => {
     assert.ok(result.description.includes("burned"), "description should say 'burned'");
   });
 
+  it("uses buildDescription for 'supply'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C9 ? { id: C9, name: "Blend", functions: [{ name: "supply" }] } : null;
+
+    const ev = makeRawEvent(C9, "supply", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("500"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "supply");
+    assert.ok(result.description.includes("supplied"), "description should say 'supplied'");
+    assert.ok(result.description.includes("500"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'borrow'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C10 ? { id: C10, name: "Blend", functions: [{ name: "borrow" }] } : null;
+
+    const ev = makeRawEvent(C10, "borrow", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("250"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "borrow");
+    assert.ok(result.description.includes("borrowed"), "description should say 'borrowed'");
+    assert.ok(result.description.includes("250"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'repay'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C11 ? { id: C11, name: "Blend", functions: [{ name: "repay" }] } : null;
+
+    const ev = makeRawEvent(C11, "repay", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("250"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "repay");
+    assert.ok(result.description.includes("repaid"), "description should say 'repaid'");
+    assert.ok(result.description.includes("250"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'liquidate'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C12 ? { id: C12, name: "Blend", functions: [{ name: "liquidate" }] } : null;
+
+    const ev = makeRawEvent(C12, "liquidate", [
+      scAddress(ADDR_G),
+      scAddress(ADDR_G2),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("100"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "liquidate");
+    assert.ok(result.description.includes("liquidated"), "description should say 'liquidated'");
+    assert.ok(result.description.includes("100"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
   it("labels the contract as SAC when contractId matches XLM SAC", async () => {
+
     // XLM_SAC_ID is already in the SAC map — db returns null (no registered ABI)
     db.getContractMeta = async () => null;
     const ev = makeRawEvent(XLM_SAC_ID, "transfer", [
