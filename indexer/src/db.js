@@ -1,4 +1,5 @@
 import pg from "pg";
+import { eventEmitter } from "./events.js";
 
 /** @typedef {import('./types.js').DecodedEvent} DecodedEvent */
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
@@ -183,6 +184,7 @@ export const db = {
         ev.event_addresses ?? [],
       ]
     );
+    eventEmitter.emit("event", ev);
   },
 
   /**

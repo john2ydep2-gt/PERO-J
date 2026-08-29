@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
+import { eventEmitter } from "./events.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -148,6 +149,26 @@ export function startApi() {
       res.json(result);
     })
   );
+
+  // GET /api/events/stream — Server-Sent Events endpoint for live event feed
+  app.get("/api/events/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const onEvent = (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    eventEmitter.on("event", onEvent);
+
+    req.on("close", () => {
+      eventEmitter.off("event", onEvent);
+      res.end();
+    });
+  });
 
   // GET /api/events/:seq
   app.get(

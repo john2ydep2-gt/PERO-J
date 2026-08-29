@@ -71,6 +71,38 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+/**
+ * Connect to the Server-Sent Events stream for live event updates.
+ *
+ * @param onEvent Callback invoked when a new DecodedEvent is streamed
+ * @param onError Optional error handler callback
+ * @returns Cleanup function that closes the EventSource connection
+ */
+export function streamEvents(
+  onEvent: (event: DecodedEvent) => void,
+  onError?: (err: Event) => void
+): () => void {
+  const url = `${BASE}/events/stream`;
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (e) => {
+    try {
+      const data: DecodedEvent = JSON.parse(e.data);
+      onEvent(data);
+    } catch (err) {
+      console.error("Failed to parse SSE event:", err);
+    }
+  };
+
+  if (onError) {
+    eventSource.onerror = onError;
+  }
+
+  return () => {
+    eventSource.close();
+  };
+}
+
 export const api = {
   distinctFunctions: () => get<string[]>("/functions"),
   events: (params: { contract?: string; fn?: string; q?: string; page?: number }) => {
@@ -92,4 +124,5 @@ export const api = {
   contract:         (id: string)                          => get<ContractMeta>(`/contracts/${id}`),
   wallet:           (address: string, page: number = 1)   => get<WalletEventsResponse>(`/wallet/${address}?page=${page}`),
   registerContract: (meta: ContractMeta)                  => post<{ ok: boolean }>("/contracts", meta),
+  streamEvents,
 };
