@@ -4,6 +4,7 @@ import { startApi } from "./api.js";
 import { db } from "./db.js";
 import { decode } from "./decoder.js";
 import { reloadSacMap } from "./sac.js";
+import { validateNetwork } from "./validateNetwork.js";
 
 dotenv.config();
 
@@ -12,8 +13,9 @@ dotenv.config();
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
 const POLL_MS = Number(process.env.POLL_MS || 5000);
+const RPC_ERROR_THRESHOLD = 3;
 
-const rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
+let rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
 /**
  * Shared health state exposed to the REST API via api.js.
@@ -73,19 +75,30 @@ async function run() {
   await db.init();
   startApi();
 
+  await validateNetwork(rpc);
+
   const persisted = await db.getCursor();
   let cursor = persisted ?? (START_LEDGER || (await rpc.getLatestLedger()).sequence - 100);
   if (persisted !== null) {
     console.log(`Resuming from persisted ledger ${cursor}`);
   }
 
+  let consecutiveErrors = 0;
+
   while (!shuttingDown) {
     try {
       const latest = await indexLedger(cursor);
       cursor = latest + 1;
       await db.setCursor(latest);
+      consecutiveErrors = 0;
     } catch (err) {
+      consecutiveErrors++;
       console.error("Indexer error:", err.message);
+      if (consecutiveErrors >= RPC_ERROR_THRESHOLD) {
+        console.warn(`${consecutiveErrors} consecutive RPC errors — recreating RPC client`);
+        rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
+        consecutiveErrors = 0;
+      }
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
@@ -94,4 +107,6 @@ async function run() {
   process.exit(0);
 }
 
-run();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  run();
+}

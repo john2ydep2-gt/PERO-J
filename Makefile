@@ -1,7 +1,7 @@
 -include .env
 export EXPLORER_CONTRACT_ID
 
-.PHONY: build test deploy redeploy indexer frontend clean seed-testnet load-test changelog changelog-preview help
+.PHONY: build test deploy redeploy indexer frontend clean seed-testnet load-test changelog db
 
 # ── Contract ──────────────────────────────────────────────────────────────────
 build:
@@ -53,6 +53,9 @@ frontend-build:
 
 # ── All ───────────────────────────────────────────────────────────────────────
 install: indexer-install frontend-install
+
+db:
+	docker compose up -d db
 
 dev:
 	$(MAKE) -j2 indexer frontend

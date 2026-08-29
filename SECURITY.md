@@ -109,6 +109,33 @@ expired prepared transaction must be rebuilt and signed again.
 
 PERO-J has not undergone a third-party security audit. The project is currently in **testnet development**. A formal audit is planned before mainnet deployment as outlined in [ROADMAP.md](ROADMAP.md).
 
+## Emergency Recovery
+
+### Key Loss is Permanent
+
+If you lose access to your Stellar private key (secret key), there is **no way to recover it**. Stellar does not provide any mechanism for key recovery or account restoration.
+
+- **No seed phrase recovery** — Unlike some blockchains, Stellar accounts are secured by a single private key
+- **No administrative override** — There is no backdoor or admin key that can recover lost accounts
+- **No support recovery** — Stellar development support cannot recover lost keys
+- **Contract redeployment required** — If an admin key is lost, the only option is to deploy a new contract instance
+
+### Recommendations
+
+- **Backup your keys securely** — Store private keys in multiple secure locations
+- **Use hardware wallets** — For significant funds, use hardware wallet solutions
+- **Test key recovery** — Verify you can access your account from a backup before storing value
+- **Document key locations** — Keep a secure record of where keys are stored (not the keys themselves)
+
+### What to Do If You Lose a Key
+
+1. **Immediately revoke access** — If possible, transfer assets to a new secure account
+2. **Deploy new contract** — If admin key is lost, deploy a new contract with a new admin key
+3. **Update configurations** — Update all references to the old contract address
+4. **Notify stakeholders** — Inform users of the contract address change
+
+**Warning:** Any assets or contracts associated with a lost key are permanently inaccessible. This is by design for security — there is no central authority that can recover lost keys.
+
 ## Contact
 
 For non-security questions or general inquiries, please open a GitHub issue or discussion. For security matters, use the reporting methods above.

@@ -236,6 +236,16 @@ Write tests for all contract functions using the Soroban test framework:
 make test
 ```
 
+### Updating Snapshots
+
+Some tests use snapshot testing to verify output consistency. To update snapshots locally:
+
+```bash
+UPDATE_SNAPSHOTS=1 cargo test
+```
+
+This will regenerate snapshot files for any tests that have changed expected output.
+
 ### Indexer & Frontend Tests
 
 Write unit and integration tests:

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { setup } from "./helpers/deploy.js";
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = process.env.INDEXER_URL || "http://localhost:3001";
 
 test.describe("Full pipeline: contract → indexer → API → frontend", () => {
   let contractId;
