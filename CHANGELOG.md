@@ -386,6 +386,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`ededb6b`](../../commit/ededb6b93522b02e0e225b63b970350d310dd0c8))
+
 - Auto-update CHANGELOG.md [skip ci] ([`e109c95`](../../commit/e109c95990533074f7b32ecaac5192d1794f905d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`14b61dc`](../../commit/14b61dc9a86124722b4230ee3a22b438efc171ec))
@@ -516,6 +518,11 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add Kubernetes deployment manifests and guide for indexer and frontend ([`8d4b8d3`](../../commit/8d4b8d35d79bf38976c77b6fe25c772635cee869))
+
+Closes [#341](../../issues/341)
+
 
 - Add Contracts directory page with debounced search ([`4a1062a`](../../commit/4a1062a207c67ec154515e7f038dec98ce460b3c))
 
