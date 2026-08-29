@@ -4,9 +4,33 @@ import pg from "pg";
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
 /** @typedef {import('./types.js').VolumeResult} VolumeResult */
 
+const DEFAULT_POOL_SIZE = 20;
+
+/**
+ * Parse and validate DATABASE_POOL_SIZE environment variable.
+ * Must be an integer between 1 and 100.
+ *
+ * @param {string} [envVal=process.env.DATABASE_POOL_SIZE]
+ * @returns {number}
+ */
+export function getPoolSize(envVal = process.env.DATABASE_POOL_SIZE) {
+  if (envVal === undefined || envVal === null || String(envVal).trim() === "") {
+    return DEFAULT_POOL_SIZE;
+  }
+  const str = String(envVal).trim();
+  const parsed = Number(str);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    console.warn(
+      `Invalid DATABASE_POOL_SIZE "${envVal}". Expected integer between 1 and 100. Falling back to default (${DEFAULT_POOL_SIZE}).`
+    );
+    return DEFAULT_POOL_SIZE;
+  }
+  return parsed;
+}
+
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 20,
+  max: getPoolSize(),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });

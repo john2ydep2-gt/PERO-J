@@ -67,7 +67,7 @@ pg.Pool.prototype.query = async (sql, params) => {
 pg.Pool.prototype.end = async () => {};
 
 // Import AFTER patching
-import { db } from "../src/db.js";
+import { db, getPoolSize } from "../src/db.js";
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
@@ -276,5 +276,29 @@ describe("db.get24hVolume()", () => {
     _nextRow = { volume_raw: "10000000" }; // 1.0000000 with 7 decimals
     const result = await db.get24hVolume("CABC", 7);
     assert.equal(result.volume_scaled, "1.0000000");
+  });
+});
+
+describe("DATABASE_POOL_SIZE / getPoolSize()", () => {
+  it("defaults to 20 when env variable is not set", () => {
+    assert.equal(getPoolSize(undefined), 20);
+    assert.equal(getPoolSize(""), 20);
+  });
+
+  it("parses valid integer pool sizes", () => {
+    assert.equal(getPoolSize("5"), 5);
+    assert.equal(getPoolSize("1"), 1);
+    assert.equal(getPoolSize("100"), 100);
+  });
+
+  it("falls back to 20 with warning when value is out of bounds (< 1 or > 100)", () => {
+    assert.equal(getPoolSize("0"), 20);
+    assert.equal(getPoolSize("-5"), 20);
+    assert.equal(getPoolSize("101"), 20);
+  });
+
+  it("falls back to 20 with warning when value is non-integer or invalid", () => {
+    assert.equal(getPoolSize("invalid"), 20);
+    assert.equal(getPoolSize("5.5"), 20);
   });
 });
