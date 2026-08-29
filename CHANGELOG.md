@@ -408,6 +408,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`2db0487`](../../commit/2db0487179d36472701168dd7bcf55389cc0b0e6))
+
 - Auto-update CHANGELOG.md [skip ci] ([`a079d4e`](../../commit/a079d4ef8211dd9662b6123f93d954ad0be4733d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`8ff57e4`](../../commit/8ff57e444a7176b192840d6dc5bbe219abc31329))
@@ -801,6 +803,8 @@ Closes [#3](../../issues/3) — Parse ScVal Types to Native JavaScript Types
 
 
 ### Miscellaneous
+
+- Resolve maintenance issues 372 through 375 ([`bba5bb7`](../../commit/bba5bb70d9af7c6d34d3ea26cd144952dcd01a2f))
 
 - Add governance, security, and development guidelines ([`5a1beab`](../../commit/5a1beab905033480fd579388b275e34fef45d31f))
 
