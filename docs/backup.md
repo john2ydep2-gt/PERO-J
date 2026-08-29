@@ -179,6 +179,10 @@ psql "postgres://user:password@localhost:5432/soroban_explorer_test_restore" \
 dropdb -U user soroban_explorer_test_restore
 ```
 
+## Minimum Dump Size
+
+The backup script verifies that the dump file is larger than 512 bytes before reporting success. If the dump is too small (e.g., an empty database or a failed `pg_dump`), the script removes the file and exits with a non-zero status. This prevents false-positive backups.
+
 ---
 
 ## Monitoring

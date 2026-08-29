@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
+import { eventEmitter } from "./events.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -10,7 +11,41 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-export function createApp() {
+/**
+ * Admin-key authentication middleware for privileged operations.
+ * Reads the expected key from the API_ADMIN_KEY environment variable
+ * and validates it against an Authorization: Bearer <key> header.
+ */
+const requireAdminKey = (req, res, next) => {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1] : null;
+  const expected = process.env.API_ADMIN_KEY;
+  if (!expected || !token || token !== expected) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+};
+
+/**
+ * Global Express error-handling middleware.
+ * Logs the full stack trace together with the request method and path
+ * so that unhandled errors are debuggable in production logs.
+ *
+ * @param {Error} err
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} _next
+ */
+export function errorHandler(err, req, res, _next) {
+  console.error("API Error:", { method: req.method, path: req.path, stack: err.stack });
+  if (res.headersSent) {
+    return;
+  }
+  res.status(500).json({ error: err.message || "Internal Server Error" });
+}
+
+export function startApi() {
   const app = express();
   app.use(express.json());
 
@@ -92,6 +127,17 @@ export function createApp() {
     })
   );
 
+  // GET /api/leaderboard?limit=10 — top contracts by event volume
+  app.get(
+    "/api/leaderboard",
+    asyncHandler(async (req, res) => {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+      const result = await db.getLeaderboard(limit);
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(result);
+    })
+  );
+
   // GET /api/events?contract=&fn=&page=&q=
   app.get(
     "/api/events",
@@ -105,6 +151,26 @@ export function createApp() {
       res.json(result);
     })
   );
+
+  // GET /api/events/stream — Server-Sent Events endpoint for live event feed
+  app.get("/api/events/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const onEvent = (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    eventEmitter.on("event", onEvent);
+
+    req.on("close", () => {
+      eventEmitter.off("event", onEvent);
+      res.end();
+    });
+  });
 
   // GET /api/events/:seq
   app.get(
@@ -120,6 +186,18 @@ export function createApp() {
         return res.status(404).json({ error: "Not found" });
       }
       res.json(ev);
+    })
+  );
+
+  // GET /api/contracts?q=&page=&limit= — paginated list of registered contracts,
+  // optionally filtered by name/description via case-insensitive search.
+  app.get(
+    "/api/contracts",
+    asyncHandler(async (req, res) => {
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 25;
+      const result = await db.getContracts({ q: req.query.q, page, limit });
+      res.json(result);
     })
   );
 
@@ -150,6 +228,20 @@ export function createApp() {
 
       await db.upsertContractMeta({ ...req.body, registered_by: registeredBy });
       res.status(201).json({ ok: true });
+    })
+  );
+
+  // DELETE /api/contracts/:id — remove contract ABI metadata (admin-authenticated)
+  app.delete(
+    "/api/contracts/:id",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const existing = await db.getContractMeta(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      await db.deleteContractMeta(req.params.id);
+      res.status(204).send();
     })
   );
 
@@ -202,14 +294,7 @@ export function createApp() {
     res.status(404).json({ error: "Not found" });
   });
 
-  // Global Error Handler Middleware
-  app.use((err, req, res, _next) => {
-    console.error("API Error:", err);
-    if (res.headersSent) {
-      return;
-    }
-    res.status(500).json({ error: err.message || "Internal Server Error" });
-  });
+  app.use(errorHandler);
 
   return app;
 }
