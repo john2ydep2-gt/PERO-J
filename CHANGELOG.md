@@ -375,6 +375,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`96bef84`](../../commit/96bef846f53002d3c8d637e795396fe6b30f12b1))
+
 - Auto-update CHANGELOG.md [skip ci] ([`73a2fc3`](../../commit/73a2fc32d98f0fba1cc9a0561c9f34d58474edf8))
 
 - Auto-update CHANGELOG.md [skip ci] ([`6f65ea6`](../../commit/6f65ea670192e67b9c9c7566219008543fd8901b))
@@ -497,6 +499,19 @@ Issue [#118](../../issues/118) — Contract admin key management
 - Add transfer_from case to buildDescription ([`dd4d9dd`](../../commit/dd4d9ddc6567d86df7956fd9fa05d3b204dbb174))
 
 - Add make db target for PostgreSQL container ([`c91e6ee`](../../commit/c91e6ee080d6e4a467917e53cf0b778640500ec2))
+
+- Add ContractPage ABI registration form for new contracts ([`cb7031c`](../../commit/cb7031ca20af229eb5cda50f877135700224371b))
+
+When navigating to an unregistered contract ID, render a registration form
+  (name, description, functions) instead of the static 'Contract not found.'
+  message. Submitting the form calls api.registerContract() and invalidates
+  the contract query cache so the metadata view renders immediately.
+
+  - Added RegistrationForm component with field validation
+  - Name field is required; description and functions are optional
+  - Functions list supports add/remove with name + description per entry
+  - Existing registered contracts are unaffected
+
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
