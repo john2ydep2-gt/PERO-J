@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import EventTable from "../components/EventTable";
-import Skeleton from "../components/Skeleton";
+import Skeleton, { SkeletonBar } from "../components/Skeleton";
 
 export default function Home() {
   const [fnFilter, setFnFilter] = useState("");
@@ -17,6 +17,8 @@ export default function Home() {
     queryFn: () => api.distinctFunctions(),
     staleTime: 5 * 60 * 1000,
   });
+
+  const activeFn = (useCustom ? customFn : fnFilter).trim();
 
   const { data, isLoading } = useQuery({
     queryKey: ["events", fnFilter, customFn, page],
@@ -74,6 +76,15 @@ export default function Home() {
           style={{ flex: "0 1 200px" }}
         />
       </div>
+
+      {isLoading ? (
+        <SkeletonBar width={220} height={16} />
+      ) : total > 0 ? (
+        <div style={{ fontSize: 13, color: "var(--muted)" }}>
+          Showing {events.length} of {total.toLocaleString()} events
+          {activeFn ? ` (filtered by function: ${activeFn})` : ""}
+        </div>
+      ) : null}
 
       <div className="card">
         {isLoading ? (
