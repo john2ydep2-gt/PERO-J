@@ -71,6 +71,8 @@ Add error counting to the indexer main loop. After 3 consecutive RPC
 Closes [#342](../../issues/342)
 
 
+- Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -390,6 +392,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`ac18f6a`](../../commit/ac18f6ad35b9b8c1358b31fd2c04014674741f5d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`3d8b1de`](../../commit/3d8b1de4e6e2193be5de801c5a4b5ef9e29302e5))
 
