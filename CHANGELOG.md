@@ -88,6 +88,8 @@ Closes [#342](../../issues/342)
 
 - Exclude /health and /ready probe endpoints from rate limiting ([`687dd6a`](../../commit/687dd6a315d091028dedf7a0e8e46ae79b6911d9))
 
+- Show total event count and active filter summary in Home.tsx ([`c51eec8`](../../commit/c51eec80cb137918bcaf489fd16ed34f77acff6c))
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -407,6 +409,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`ba0b6fb`](../../commit/ba0b6fb552ab3b9fc8c7f81cec1d99106952d965))
 
 - Auto-update CHANGELOG.md [skip ci] ([`b3f537a`](../../commit/b3f537ac772eaa31e3655ddcf6bb787926d62596))
 
