@@ -1,6 +1,10 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 export default function NotFound() {
+  useEffect(() => {
+    document.title = "404 Not Found - Soroban Smart Block Explorer";
+  }, []);
   return (
     <div style={{ textAlign: "center", padding: "40px 20px" }}>
       <h1 style={{ fontSize: 48, marginBottom: 16 }}>404</h1>

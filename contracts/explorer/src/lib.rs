@@ -208,6 +208,7 @@ impl ExplorerContract {
             panic_with_error!(env, Error::Unauthorized);
         }
     }
+    
 }
 
 #[contractimpl]
@@ -249,6 +250,7 @@ impl ExplorerContract {
     /// emergency recovery procedure.
     pub fn transfer_admin(env: Env, current_admin: Address, new_admin: Address) {
         current_admin.require_auth();
+        // See SECURITY.md's Admin Transfer Procedure for the required auth envelope.
         new_admin.require_auth();
 
         let stored = Self::admin(&env);
@@ -420,13 +422,13 @@ impl ExplorerContract {
         // Only the admin or an allowlisted indexer may submit events.
         Self::require_submitter(&env, &caller);
 
-        // Guard against large blobs bloating on-chain storage.
+        // Guard against large blobs or descriptions bloating on-chain storage.
         if raw_data.len() > MAX_RAW_DATA_BYTES {
             panic_with_error!(&env, Error::LimitExceeded);
         }
 
-        // Guard against oversized description strings.
-        if description.len() > MAX_DESCRIPTION_LEN {
+        // Enforce a maximum description size to avoid unbounded rent growth.
+        if description.len() as u32 > MAX_DESCRIPTION_LEN {
             panic_with_error!(&env, Error::LimitExceeded);
         }
 
