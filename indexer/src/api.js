@@ -10,7 +10,7 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
 
-export function startApi() {
+export function createApp() {
   const app = express();
   app.use(express.json());
 
@@ -196,6 +196,25 @@ export function startApi() {
     })
   );
 
+  // GET /api/tokens/:id/metadata — SEP-41 token metadata
+  app.get(
+    "/api/tokens/:id/metadata",
+    asyncHandler(async (req, res) => {
+      const contractId = req.params.id;
+      try {
+        const meta = await fetchTokenMetadata(contractId);
+        res.json({
+          contract_id: contractId,
+          name: meta.name,
+          symbol: meta.symbol,
+          decimals: meta.decimals,
+        });
+      } catch {
+        res.status(404).json({ error: "Token not found or not SEP-41 compliant" });
+      }
+    })
+  );
+
   app.use((req, res) => {
     res.status(404).json({ error: "Not found" });
   });
@@ -209,5 +228,10 @@ export function startApi() {
     res.status(500).json({ error: err.message || "Internal Server Error" });
   });
 
+  return app;
+}
+
+export function startApi() {
+  const app = createApp();
   app.listen(PORT, () => console.log(`API listening on :${PORT}`));
 }
