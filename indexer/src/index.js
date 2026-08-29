@@ -5,6 +5,7 @@ import { db } from "./db.js";
 import { decode } from "./decoder.js";
 import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
+import { submitEvent } from "./contract.js";
 
 dotenv.config();
 
@@ -42,6 +43,10 @@ async function indexLedger(ledger) {
 
   for (const ev of res.events) {
     const decoded = await decode(ev);
+    const onchain_seq = await submitEvent(decoded);
+    if (onchain_seq !== null) {
+      decoded.onchain_seq = onchain_seq;
+    }
     await db.upsertEvent(decoded);
     console.log(`[${ev.ledger}] ${decoded.function}: ${decoded.description}`);
   }

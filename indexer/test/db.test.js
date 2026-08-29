@@ -119,6 +119,25 @@ describe("db.upsertEvent()", () => {
     const { params } = lastCall();
     assert.equal(params[0], sampleEvent.contract_id);
   });
+
+  it("persists onchain_seq when provided", async () => {
+    const eventWithSeq = { ...sampleEvent, onchain_seq: 42 };
+    await db.upsertEvent(eventWithSeq);
+    const { params } = lastCall();
+    assert.equal(params[params.length - 1], 42, "expected onchain_seq as last parameter");
+  });
+
+  it("passes null for onchain_seq when not provided", async () => {
+    await db.upsertEvent(sampleEvent);
+    const { params } = lastCall();
+    assert.equal(params[params.length - 1], null, "expected null onchain_seq when not provided");
+  });
+
+  it("includes onchain_seq column in INSERT statement", async () => {
+    await db.upsertEvent(sampleEvent);
+    const { sql } = lastCall();
+    assert.ok(sql.includes("onchain_seq"), "expected onchain_seq column in INSERT");
+  });
 });
 
 describe("db.getEvent()", () => {
