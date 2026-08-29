@@ -35,7 +35,13 @@ if pg_dump \
   --if-exists \
   --create \
   > "${BACKUP_FILE}" 2>> "${LOG_FILE}"; then
-  echo "[$(date -Iseconds)] Backup completed successfully: ${BACKUP_FILE}" >> "${LOG_FILE}"
+  if [ "$(stat -c%s "${BACKUP_FILE}")" -gt 512 ]; then
+    echo "[$(date -Iseconds)] Backup completed successfully: ${BACKUP_FILE}" >> "${LOG_FILE}"
+  else
+    echo "[$(date -Iseconds)] Backup FAILED: dump file is too small (<= 512 bytes)" >> "${LOG_FILE}"
+    rm -f "${BACKUP_FILE}"
+    exit 1
+  fi
 else
   echo "[$(date -Iseconds)] Backup FAILED" >> "${LOG_FILE}"
   rm -f "${BACKUP_FILE}"
