@@ -18,6 +18,22 @@ jobs:
 
   indexer:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: soroban_explorer_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d soroban_explorer_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/soroban_explorer_test
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -28,6 +44,7 @@ jobs:
         working-directory: indexer
         run: |
           npm ci
+          node --input-type=module -e 'import { db } from "./src/db.js"; await db.init(); await db.close();'
           node --test test/
 
   frontend:
@@ -59,7 +76,10 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - name: Install soroban CLI
-        run: cargo install soroban-cli --locked
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
+          cargo install soroban-cli
       - name: Install Playwright
         working-directory: tests/e2e
         run: |

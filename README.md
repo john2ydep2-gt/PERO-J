@@ -68,7 +68,8 @@ PERO-J decodes contract calls on the fly using an ABI-like metadata registry, tu
 git clone https://github.com/PERO-J
 cd PERO-J
 cp .env.example .env
-# Edit .env with your RPC URL and DATABASE_URL
+# Edit .env with your RPC URL and DATABASE_URL. See [.env.example](.env.example)
+# for all supported indexer, database, contract, and SEP-41 settings.
 ```
 
 ### 2. Build & deploy the contract
@@ -80,6 +81,9 @@ make deploy     # deploy to testnet, prints CONTRACT_ID
 Copy the printed contract ID into `.env` as `EXPLORER_CONTRACT_ID`.
 
 ### 3. Start the indexer + API
+
+The indexer validates `NETWORK_PASSPHRASE` on startup by querying the RPC endpoint. If the configured passphrase does not match the RPC-reported network, the indexer logs an error and exits with code 1. This prevents mainnet/testnet mix-ups.
+
 ```bash
 make indexer-install
 make indexer
@@ -130,8 +134,11 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 | `GET /health` | Liveness + lag probe — returns `lag_seconds`, `uptime_seconds`, `last_ledger`. HTTP 200 when healthy, 503 when `lag_seconds > 30`. |
 | `GET /api/events?contract=&fn=&page=` | Paginated event list: `{ events, total, page, limit }` |
 | `GET /api/events/:seq` | Single event |
+| `GET /api/events/:seq/raw` | Raw un-decoded event topics and data: `{ seq, raw_topics, raw_data, tx_hash }` |
 | `GET /api/contracts/:id` | Contract ABI metadata |
+| `GET /api/contracts/:id/events?fn=&page=` | Paginated event list for contract: `{ events, total, page, limit }` |
 | `POST /api/contracts` | Register contract metadata |
+| `DELETE /api/contracts/:id` | Remove contract ABI metadata (requires `Authorization: Bearer <API_ADMIN_KEY>`) |
 | `GET /api/wallet/:address` | Wallet event history |
 | `GET /api/tokens/:id/volume?decimals=` | 24-hour rolling transfer volume for a SEP-41 token. Optional `decimals` query param (integer 0–38) overrides the on-chain metadata lookup. |
 

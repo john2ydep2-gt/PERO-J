@@ -49,15 +49,17 @@ const XLM_SAC_ID = new Contract(
 
 // Unique valid contract IDs (derived from deterministic seeds) — one per test
 // so that the 60-second LRU cache in decoder.js never bleeds between tests.
-const [C1, C2, C3, C4, C5, C6, C7, C8] = [1, 2, 3, 4, 5, 6, 7, 8].map((i) =>
-  StrKey.encodeContract(Buffer.alloc(32, i))
-);
+const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+].map((i) => StrKey.encodeContract(Buffer.alloc(32, i)));
+
 
 // ── mock setup ────────────────────────────────────────────────────────────────
 // Import db first, replace getContractMeta, then import decode.
 
 import { db } from "../src/db.js";
-import { decode } from "../src/decoder.js";
+import { decode, fmt } from "../src/decoder.js";
+
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
@@ -108,12 +110,12 @@ describe("decode()", () => {
     db.getContractMeta = async (id) =>
       id === C4 ? { id: C4, name: "Blend", functions: [{ name: "transfer" }] } : null;
 
-    const ev = makeRawEvent(C4, "transfer", [
-      scAddress(ADDR_G),
-      scAddress(ADDR_G2),
-      xdr.ScVal.scvString("50"),
-      xdr.ScVal.scvString("USDC"),
-    ]);
+    const ev = makeRawEvent(
+      C4,
+      "transfer",
+      [scAddress(ADDR_G), scAddress(ADDR_G2)],
+      xdr.ScVal.scvString("50")
+    );
 
     const result = await decode(ev);
     assert.equal(result.function, "transfer");
@@ -151,7 +153,81 @@ describe("decode()", () => {
     assert.ok(result.description.includes("burned"), "description should say 'burned'");
   });
 
+  it("uses buildDescription for 'supply'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C9 ? { id: C9, name: "Blend", functions: [{ name: "supply" }] } : null;
+
+    const ev = makeRawEvent(C9, "supply", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("500"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "supply");
+    assert.ok(result.description.includes("supplied"), "description should say 'supplied'");
+    assert.ok(result.description.includes("500"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'borrow'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C10 ? { id: C10, name: "Blend", functions: [{ name: "borrow" }] } : null;
+
+    const ev = makeRawEvent(C10, "borrow", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("250"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "borrow");
+    assert.ok(result.description.includes("borrowed"), "description should say 'borrowed'");
+    assert.ok(result.description.includes("250"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'repay'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C11 ? { id: C11, name: "Blend", functions: [{ name: "repay" }] } : null;
+
+    const ev = makeRawEvent(C11, "repay", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("250"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "repay");
+    assert.ok(result.description.includes("repaid"), "description should say 'repaid'");
+    assert.ok(result.description.includes("250"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'liquidate'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C12 ? { id: C12, name: "Blend", functions: [{ name: "liquidate" }] } : null;
+
+    const ev = makeRawEvent(C12, "liquidate", [
+      scAddress(ADDR_G),
+      scAddress(ADDR_G2),
+      xdr.ScVal.scvString("USDC"),
+      xdr.ScVal.scvString("100"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "liquidate");
+    assert.ok(result.description.includes("liquidated"), "description should say 'liquidated'");
+    assert.ok(result.description.includes("100"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include asset");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
   it("labels the contract as SAC when contractId matches XLM SAC", async () => {
+
     // XLM_SAC_ID is already in the SAC map — db returns null (no registered ABI)
     db.getContractMeta = async () => null;
     const ev = makeRawEvent(XLM_SAC_ID, "transfer", [
@@ -191,4 +267,65 @@ describe("decode()", () => {
     const result = await decode(makeRawEvent(C1, "check"));
     assert.ok(result.raw_topics.every((t) => typeof t === "string"));
   });
+
+  it("genericDescription does not truncate a valid 56-char strkey", async () => {
+    db.getContractMeta = async () => null;
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(ADDR_G)]);
+    const result = await decode(ev);
+    assert.ok(result.description.includes(ADDR_G), "valid strkey should not be truncated");
+  });
+
+  it("genericDescription does not truncate a 128-char non-address string", async () => {
+    db.getContractMeta = async () => null;
+    const longStr = "a b ".repeat(32);
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(longStr)]);
+    const result = await decode(ev);
+    assert.ok(result.description.includes(longStr), "128-char string should not be truncated");
+  });
+
+  it("genericDescription truncates a 129-char non-address string", async () => {
+    db.getContractMeta = async () => null;
+    const longStr = "c d ".repeat(32) + "e";
+    const ev = makeRawEvent(C8, "myFunc", [xdr.ScVal.scvString(longStr)]);
+    const result = await decode(ev);
+    assert.ok(
+      result.description.includes("…"),
+      "129-char string should be truncated"
+    );
+    assert.ok(
+      !result.description.includes(longStr),
+      "129-char string full value should not appear"
+    );
+  });
 });
+
+describe("fmt()", () => {
+  it("truncates valid 56-character G… public key to first6…last4 format", () => {
+    const key = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
+    assert.equal(fmt(key), "GCFIRY…YOJR");
+  });
+
+  it("truncates valid 56-character C… contract address to first6…last4 format", () => {
+    const contract = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+    assert.equal(fmt(contract), "CDLZFC…CYSC");
+  });
+
+  it("returns non-address string 'swap' unchanged", () => {
+    assert.equal(fmt("swap"), "swap");
+  });
+
+  it("returns number 123 as '123' unchanged", () => {
+    assert.equal(fmt(123), "123");
+  });
+
+  it("returns short strings unchanged", () => {
+    assert.equal(fmt("XLM"), "XLM");
+    assert.equal(fmt("G123"), "G123");
+  });
+
+  it("returns non-matching 56-character string unchanged", () => {
+    const nonAddr = "ABCDEFGHIJ1234567890123456789012345678901234567890123456";
+    assert.equal(fmt(nonAddr), nonAddr);
+  });
+});
+
