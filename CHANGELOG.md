@@ -408,6 +408,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`8ff57e4`](../../commit/8ff57e444a7176b192840d6dc5bbe219abc31329))
+
 - Auto-update CHANGELOG.md [skip ci] ([`649b310`](../../commit/649b3109eea6a63dc73088f0a75df4ea6f0f5732))
 
 - Auto-update CHANGELOG.md [skip ci] ([`07313ae`](../../commit/07313ae381624756d33f8d90290a979d3b03e70e))
@@ -607,6 +609,8 @@ When navigating to an unregistered contract ID, render a registration form
 - Add robots.txt and SEO metadata tags ([`b0a44b9`](../../commit/b0a44b9c791fea500efc5fce5d300df1a02124e0))
 
 - Add GET /api/events/:seq/raw endpoint returning un-decoded XDR topics ([#347](../../issues/347)) ([`4fad1ff`](../../commit/4fad1ffa698ff16b57dcbbef5931e5df4372cd13))
+
+- Add GET /api/stats endpoint returning total events, contracts, and unique addresses ([`7e85094`](../../commit/7e850948f004cf2aa468738f065e793f125413d8))
 
 - Expose list of all registered contract IDs ([`86853e7`](../../commit/86853e7234fed2f523b18b6435f9f021f320660d))
 
