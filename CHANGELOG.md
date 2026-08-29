@@ -379,6 +379,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`09a1254`](../../commit/09a12541468238877ddb9c8a5e8ef538f428b408))
+
 - Auto-update CHANGELOG.md [skip ci] ([`78cf7e2`](../../commit/78cf7e216964755ff68d176d0b0e70c01361145c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`0978cb8`](../../commit/0978cb8811912f61403f5cb15199f5a24f4160ef))
@@ -503,6 +505,18 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add Contracts directory page with debounced search ([`4a1062a`](../../commit/4a1062a207c67ec154515e7f038dec98ce460b3c))
+
+- Add Contracts link to nav ([`5198fac`](../../commit/5198fac464dc43898374b96135542069b6eeb18c))
+
+- Add /contracts route ([`c1cc83a`](../../commit/c1cc83ab64192a625fba7af771ae18882f628e99))
+
+- Add frontend api.contracts() search helper ([`f880b57`](../../commit/f880b57dc0284ba64de3bf0296e7893002dcdadb))
+
+- Add GET /api/contracts list endpoint with q param ([`49ee764`](../../commit/49ee764a893a5c9798c6b9b1a6957c43688bcef8))
+
+- Add db.getContracts with name/description search ([`480e135`](../../commit/480e135d8a457ac459b77e8d4933157fd217d373))
 
 - Add transfer_from case to buildDescription ([`dd4d9dd`](../../commit/dd4d9ddc6567d86df7956fd9fa05d3b204dbb174))
 
