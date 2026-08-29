@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Remove redundant ALTER TABLE sac_asset from migration [#1](../../issues/1) ([`6f8e502`](../../commit/6f8e50223ef5b1573d7ba79cbc40b63f20ac775d))
+
 - Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
 
 Closes [#340](../../issues/340)
@@ -392,6 +394,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`1cfc643`](../../commit/1cfc643791d2431c4b3f97c87dac5028598c3f4f))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ac18f6a`](../../commit/ac18f6ad35b9b8c1358b31fd2c04014674741f5d))
 
