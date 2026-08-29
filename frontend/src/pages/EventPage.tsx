@@ -30,21 +30,7 @@ export default function EventPage() {
     }
   }, [ev]);
 
-  if (!seqIsValid) {
-    return (
-      <div className="card" style={{ padding: 24 }}>
-        <p style={{ color: "var(--error, #e05252)", fontWeight: 600 }}>
-          Invalid event ID: &ldquo;{seq}&rdquo;
-        </p>
-        <p style={{ marginTop: 8 }}>
-          Event IDs must be non-negative integers. Please check the URL and try
-          again, or <Link to="/">return to the event feed</Link>.
-        </p>
-      </div>
-    );
-  }
-
-  if (isLoading) return <div className="card"><Skeleton rows={4} /></div>;
+  if (isLoading) return <div className="card"><Skeleton variant="card" rows={4} /></div>;
   if (!ev) return <p>Event not found.</p>;
 
   const topics = ev.raw_topics ?? [];

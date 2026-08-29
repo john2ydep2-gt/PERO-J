@@ -25,6 +25,7 @@ export default function Home() {
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
+  const hasActiveFilter = Boolean((useCustom ? customFn : fnFilter).trim());
 
   const handleFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -77,7 +78,7 @@ export default function Home() {
 
       <div className="card">
         {isLoading ? (
-          <Skeleton />
+          <Skeleton variant="table" />
         ) : events.length === 0 && page > 1 ? (
           <div style={{ textAlign: "center", padding: "40px 20px" }}>
             <p style={{ fontSize: 16, fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>
@@ -88,7 +89,11 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <EventTable events={events} />
+          <EventTable
+            events={events}
+            emptyMessage={hasActiveFilter ? "No events match your current filters." : undefined}
+            emptySubtitle={hasActiveFilter ? "Try adjusting your filter criteria." : undefined}
+          />
         )}
       </div>
 

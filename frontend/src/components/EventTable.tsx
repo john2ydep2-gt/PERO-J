@@ -4,9 +4,15 @@ import type { DecodedEvent } from "../api";
 
 interface Props {
   events: DecodedEvent[];
+  emptyMessage?: string;
+  emptySubtitle?: string;
 }
 
-export default function EventTable({ events }: Props) {
+export default function EventTable({
+  events,
+  emptyMessage = "No events found.",
+  emptySubtitle = "Register your contract to start decoding events",
+}: Props) {
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
   if (!events.length) {
     return (
@@ -27,10 +33,10 @@ export default function EventTable({ events }: Props) {
           <path d="M12 22.08V12" />
         </svg>
         <p style={{ fontSize: 16, fontWeight: 500, color: "var(--text)", marginBottom: 8 }}>
-          No events found.
+          {emptyMessage}
         </p>
         <p style={{ fontSize: 14, color: "var(--muted)" }}>
-          Register your contract to start decoding events
+          {emptySubtitle}
         </p>
       </div>
     );
