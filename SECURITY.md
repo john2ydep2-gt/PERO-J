@@ -67,6 +67,30 @@ We do not offer monetary bug bounties at this time, but we recognize responsible
 
 ## Security Best Practices
 
+### Admin Transfer Procedure
+
+`transfer_admin` intentionally requires authorization from both the current
+admin and the new admin before ownership changes. This prevents a mistyped
+address from permanently locking the contract, but it means the new admin must
+co-sign the same transaction. The new admin does not need to be online at the
+time the transaction is created; the transaction can be prepared and shared
+for signing.
+
+For a handoff using a hardware wallet or multi-signature account:
+
+1. Build an invoke transaction calling `transfer_admin` with the current admin
+   and new admin addresses.
+2. Simulate and prepare the transaction with the network's Soroban tooling.
+3. Have the current admin sign its authorization entry.
+4. Share the prepared transaction or auth envelope with the new admin. Have
+   the new admin sign its authorization entry; for a multi-signature account,
+   collect the signatures required by that account's signer policy.
+5. Combine the signatures, verify both authorization entries and the target
+   address, then submit the transaction to the network.
+
+Do not submit until both parties have verified the new address. A failed or
+expired prepared transaction must be rebuilt and signed again.
+
 ### For Users
 
 - **Do not share your Stellar private keys** with any service, including PERO-J

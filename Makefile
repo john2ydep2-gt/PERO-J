@@ -141,5 +141,17 @@ e2e-ci:
 # Regenerate CHANGELOG.md from conventional commits using git-cliff.
 # Install: cargo install git-cliff  OR  brew install git-cliff
 changelog:
-	git-cliff --config cliff.toml --output CHANGELOG.md
+	git-cliff --config cliff.toml --unreleased --output CHANGELOG.md
 	@echo "CHANGELOG.md updated."
+
+changelog-preview:
+	git-cliff --config cliff.toml --unreleased
+
+help:
+	@printf "Available targets:\n"
+	@printf "  make build              Build the contract WASM\n"
+	@printf "  make test               Run contract tests\n"
+	@printf "  make dev                Start the indexer and frontend\n"
+	@printf "  make e2e                Run the full end-to-end suite\n"
+	@printf "  make changelog          Update CHANGELOG.md with unreleased changes\n"
+	@printf "  make changelog-preview  Preview unreleased changes without modifying files\n"
