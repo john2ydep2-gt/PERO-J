@@ -165,6 +165,17 @@ describe("db.getEvents()", () => {
     );
   });
 
+  it("escapes wildcard characters in q for ILIKE searches", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "100% swap_" });
+    const firstSql = _calls[0]?.sql ?? "";
+    const firstParams = _calls[0]?.params ?? [];
+
+    assert.ok(firstSql.toUpperCase().includes("ILIKE"), "expected ILIKE in search query");
+    assert.ok(firstSql.toUpperCase().includes("ESCAPE"), "expected ESCAPE clause");
+    assert.deepEqual(firstParams, ["%100\\% swap\\_%"]);
+  });
+
   it("defaults to page 1, limit 25", async () => {
     _nextRow = { count: "0" };
     const result = await db.getEvents();

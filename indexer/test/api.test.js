@@ -8,7 +8,9 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { errorHandler } from "../src/api.js";
+import { StrKey } from "@stellar/stellar-sdk";
+import { createApp, errorHandler } from "../src/api.js";
+import { db } from "../src/db.js";
 
 function createMockRes() {
   return {
@@ -100,5 +102,58 @@ describe("errorHandler middleware", () => {
 
     assert.equal(statusCalled, false, "should not call res.status() when headersSent");
     assert.equal(jsonCalled, false, "should not call res.json() when headersSent");
+  });
+});
+
+describe("wallet address validation", () => {
+  it("returns 400 for invalid wallet addresses and never calls the database", async () => {
+    const original = db.getWalletEvents;
+    let called = false;
+    db.getWalletEvents = async () => {
+      called = true;
+      return { events: [], total: 0, page: 1, limit: 25 };
+    };
+
+    try {
+      const app = createApp();
+      const server = app.listen(0);
+      const { port } = server.address();
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/wallet/not-an-address`);
+      const body = await res.json();
+
+      assert.equal(res.status, 400);
+      assert.deepEqual(body, { error: "Invalid Stellar address" });
+      assert.equal(called, false, "wallet DB query should not be called for invalid addresses");
+
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    } finally {
+      db.getWalletEvents = original;
+    }
+  });
+
+  it("accepts a valid G… public key format for the wallet endpoint", async () => {
+    const original = db.getWalletEvents;
+    let seenAddress;
+    db.getWalletEvents = async (address, opts) => {
+      seenAddress = address;
+      return { events: [], total: 0, page: opts.page, limit: opts.limit };
+    };
+
+    try {
+      const app = createApp();
+      const server = app.listen(0);
+      const { port } = server.address();
+      const validAddress = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 1));
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/wallet/${validAddress}`);
+
+      assert.equal(res.status, 200);
+      assert.equal(seenAddress, validAddress);
+
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    } finally {
+      db.getWalletEvents = original;
+    }
   });
 });
