@@ -8,6 +8,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Handle NULL event_addresses in getWalletEvents and backfill legacy rows ([`f1389a9`](../../commit/f1389a9360922f9b294e33e487c6895e50bdf0ce))
+
+Closes [#340](../../issues/340)
+
+
 - Read transfer amount from event data, not topic ([`cca26f5`](../../commit/cca26f51cf750174e537a9b33ad38b388b0d27a0))
 
 - Cap getEvents limit at MAX_PAGE (200) ([`d7b664f`](../../commit/d7b664f97f3dcb00b9fafa2df239b54b05ac2008))
@@ -385,6 +390,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`7440e83`](../../commit/7440e8322c7b0e7da8a31ffbbb1ddf619a40a893))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ededb6b`](../../commit/ededb6b93522b02e0e225b63b970350d310dd0c8))
 
