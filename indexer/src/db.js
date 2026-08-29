@@ -32,7 +32,6 @@ const migrations = [
         onchain_seq BIGINT,
         created_at  TIMESTAMPTZ DEFAULT NOW()
       );
-      ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT;
       ALTER TABLE events ADD COLUMN IF NOT EXISTS event_addresses TEXT[];
       CREATE INDEX IF NOT EXISTS idx_events_contract ON events(contract_id);
       CREATE INDEX IF NOT EXISTS idx_events_function ON events(function);
