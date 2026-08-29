@@ -208,33 +208,7 @@ impl ExplorerContract {
             panic_with_error!(env, Error::Unauthorized);
         }
     }
-
-    /// Read the current event sequence counter from instance storage.
-    fn event_seq(env: &Env) -> u64 {
-        env.storage()
-            .instance()
-            .get(&DataKey::EventSeq)
-            .unwrap_or_else(|| panic_with_error!(env, Error::NotFound))
-    }
-
-    /// Validate `ContractMeta` field limits.
-    ///
-    /// Rejects ABI registrations that exceed the on-chain size caps so that
-    /// a single call cannot bloat storage without limit.  Also enforces that
-    /// every `ParamDef.kind` is a known `ParamKind` variant — the enum type
-    /// already guarantees this at the XDR layer, so this is a belt-and-
-    /// suspenders check that documents the invariant explicitly.
-    fn validate_meta(env: &Env, meta: &ContractMeta) {
-        if meta.functions.len() > MAX_FUNCTIONS {
-            panic_with_error!(env, Error::LimitExceeded);
-        }
-        for i in 0..meta.functions.len() {
-            let f = meta.functions.get(i).unwrap();
-            if f.params.len() > MAX_PARAMS {
-                panic_with_error!(env, Error::LimitExceeded);
-            }
-        }
-    }
+    
 }
 
 #[contractimpl]
@@ -448,8 +422,13 @@ impl ExplorerContract {
         // Only the admin or an allowlisted indexer may submit events.
         Self::require_submitter(&env, &caller);
 
-        // Guard against large blobs bloating on-chain storage.
+        // Guard against large blobs or descriptions bloating on-chain storage.
         if raw_data.len() > MAX_RAW_DATA_BYTES {
+            panic_with_error!(&env, Error::LimitExceeded);
+        }
+
+        // Enforce a maximum description size to avoid unbounded rent growth.
+        if description.len() as u32 > MAX_DESCRIPTION_LEN {
             panic_with_error!(&env, Error::LimitExceeded);
         }
 
@@ -657,7 +636,7 @@ mod tests {
 
     #[test]
     fn test_submit_event_max_description_len_ok() {
-        let (env, client) = setup();
+        let (env, client) = setup!();
         let admin = Address::generate(&env);
         client.init(&admin);
 
@@ -675,7 +654,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_submit_event_oversized_description_panics() {
-        let (env, client) = setup();
+        let (env, client) = setup!();
         let admin = Address::generate(&env);
         client.init(&admin);
 
