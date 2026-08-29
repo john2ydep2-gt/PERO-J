@@ -8,6 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Cap getEvents limit at MAX_PAGE (200) ([`d7b664f`](../../commit/d7b664f97f3dcb00b9fafa2df239b54b05ac2008))
+
 - Resolve issues [#368](../../issues/368), [#369](../../issues/369), [#370](../../issues/370), [#371](../../issues/371) ([`5bb3d82`](../../commit/5bb3d8232709de57da619097919841607a53fe28))
 
 - [#368](../../issues/368): sanitiseArg now bypasses truncation for valid strkeys,
@@ -374,6 +376,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`0978cb8`](../../commit/0978cb8811912f61403f5cb15199f5a24f4160ef))
 
 - Auto-update CHANGELOG.md [skip ci] ([`96bef84`](../../commit/96bef846f53002d3c8d637e795396fe6b30f12b1))
 
