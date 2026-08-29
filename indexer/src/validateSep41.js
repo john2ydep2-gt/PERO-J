@@ -99,13 +99,23 @@ async function mapWithConcurrency(items, limit, mapper) {
     while (nextIndex < items.length) {
       const currentIndex = nextIndex;
       nextIndex += 1;
-      results[currentIndex] = await mapper(items[currentIndex]);
+      try {
+        results[currentIndex] = await mapper(items[currentIndex]);
+      } catch {
+        // A throwing mapper must never leave a hole in results. Treat the
+        // item as non-compliant (false) so the caller's
+        // Object.values(results).every(Boolean) check correctly reports the
+        // contract as non-compliant instead of silently skipping the check.
+        results[currentIndex] = false;
+      }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
   return results;
 }
+
+export { mapWithConcurrency };
 
 async function functionExists(contract, fnName, args) {
   const account = new Account(DUMMY_SOURCE, "0");
