@@ -8,6 +8,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Replace fragile LIKE '{%' JSON heuristic in get24hVolume ([`e5a35d7`](../../commit/e5a35d75aea2f5f8c7a3995bb32487c4757eff79))
+
+The LIKE pattern rejected valid JSON objects with leading whitespace
+  and didn't reliably exclude non-object JSON (arrays, strings) before
+  the ::jsonb cast. Match on the first non-whitespace character instead.
+
+  Fixes [#308](../../issues/308)
+
+
 - Make mapper errors resolve instead of leaving holes ([`a2d03d2`](../../commit/a2d03d2065bd064f13df0b1b764fcf501aa867cc))
 
 In mapWithConcurrency, an unhandled error thrown by the mapper could leave a
@@ -481,6 +490,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`5488227`](../../commit/54882272aedaa66723ea7ad9160f87fe7921eb6c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`83a3473`](../../commit/83a3473beb147c060bb8b08f62032eec8ee4603d))
 
