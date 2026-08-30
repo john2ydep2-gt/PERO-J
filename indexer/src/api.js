@@ -332,8 +332,8 @@ export function createApp() {
   return app;
 }
 
-export function startApi(port = PORT) {
+export function startApi() {
   const app = createApp();
-  return app.listen(port, () => console.log(`API listening on :${port}`));
+  return app.listen(PORT, () => console.log(`API listening on :${PORT}`));
 }
 

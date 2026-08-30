@@ -107,6 +107,17 @@ const migrations = [
       UPDATE events SET event_addresses = ARRAY[]::TEXT[] WHERE event_addresses IS NULL;
     `,
   },
+  {
+    id: 5,
+    name: "add_description_tsvector_gin_index",
+    sql: `
+      ALTER TABLE events
+        ADD COLUMN IF NOT EXISTS description_tsv TSVECTOR
+          GENERATED ALWAYS AS (to_tsvector('english', description)) STORED;
+      CREATE INDEX IF NOT EXISTS idx_events_description_tsv
+        ON events USING GIN(description_tsv);
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
