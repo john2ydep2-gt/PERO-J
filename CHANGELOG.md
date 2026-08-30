@@ -471,6 +471,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`c8a3e8f`](../../commit/c8a3e8f51b77932dbd9d3b1357dcf3cd06c24656))
+
 - Auto-update CHANGELOG.md [skip ci] ([`8305968`](../../commit/830596888dd58a177aeebe51f2d0bd7948294481))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ca198df`](../../commit/ca198df4255301ed2c403fa3fd99793bb8e0076b))
@@ -655,6 +657,20 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add Phoenix ABI fixture and auto-register fixtures at startup ([`7eb7434`](../../commit/7eb743476e12058962652e99d406f76925960ccf))
+
+Add a Phoenix DEX ABI fixture (phoenix-abi.json) alongside the existing
+  StellarSwap and Blend fixtures, and register all ABI fixtures automatically
+  during indexer startup. This satisfies ROADMAP deliverable 2.5 (ABI metadata
+  for live testnet DEX/lending contracts) and extends decoded coverage to the
+  third major Stellar DEX.
+
+  Registration uses the existing idempotent upsertContractMeta path and tags
+  each row registered_by="fixture".
+
+  Closes [#381](../../issues/381), [#384](../../issues/384), [#380](../../issues/380), [#378](../../issues/378)
+
 
 - Add SEP-41 approve decode case ([`862be45`](../../commit/862be450940e15799515f5d00d2d504d19bb749f))
 
