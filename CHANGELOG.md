@@ -111,6 +111,32 @@ The contract-metadata LRU cache stored a null ("not registered") result for
   Closes [#312](../../issues/312), [#314](../../issues/314), [#320](../../issues/320), [#321](../../issues/321)
 
 
+- Align pagination, add metaLoading guard, and add stake/unstake/deposit/withdraw decoders ([`2815a0d`](../../commit/2815a0df16de3df606d05d93f59c37d00b94c7ff))
+
+- fix([#304](../../issues/304)): remove events.length < limit guard from WalletPage Next
+    button; use page * limit >= total only, consistent with Home.tsx.
+    Prevents premature disabling when the last page is exactly full
+    (total % limit === 0).
+
+  - fix([#305](../../issues/305)): add !metaLoading to ContractPage events query enabled
+    condition (!!id && !metaLoading && !!meta). Prevents a dangling
+    request firing during the loading window before meta settles to null
+    for an unregistered contract ID.
+
+  - fix([#306](../../issues/306)): add case 'stake' and case 'unstake' to buildDescription()
+    in decoder.js. Staking events on Blend and similar DeFi protocols now
+    produce human-readable output instead of falling through to
+    genericDescription(). Unit tests added.
+
+  - fix([#307](../../issues/307)): add case 'deposit' and case 'withdraw' to buildDescription()
+    in decoder.js. Deposit/withdraw events on Blend and Phoenix now produce
+    sentences like 'Address GA… deposited 1000 USDC into Blend'. Unit
+    tests added. blend-abi.json fixture updated with stake, unstake, and
+    deposit function entries.
+
+  Closes [#304](../../issues/304), [#305](../../issues/305), [#306](../../issues/306), [#307](../../issues/307)
+
+
 - Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
 
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
@@ -550,6 +576,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`aa76762`](../../commit/aa7676255a07306bbb26b01afccc6806926e721c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`0afe35b`](../../commit/0afe35bccfcdd3a23864bd1e215408bcdbfb8880))
 
