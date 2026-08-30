@@ -198,8 +198,8 @@ export const db = {
    */
   async upsertEvent(ev) {
     await pool.query(
-      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT DO NOTHING`,
       [
         ev.contract_id,
@@ -211,6 +211,7 @@ export const db = {
         ev.raw_data,
         ev.sac_asset ?? null,
         ev.event_addresses ?? [],
+        ev.onchain_seq ?? null,
       ]
     );
     eventEmitter.emit("event", ev);
