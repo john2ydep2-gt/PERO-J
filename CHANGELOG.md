@@ -137,6 +137,25 @@ The contract-metadata LRU cache stored a null ("not registered") result for
   Closes [#304](../../issues/304), [#305](../../issues/305), [#306](../../issues/306), [#307](../../issues/307)
 
 
+- Migration lock never released on ROLLBACK; remove latestLedger duplicate from /health ([`afd8560`](../../commit/afd856048533bd6479ff41af3dfea45fd80f8669))
+
+- db.js: wrap pg_advisory_unlock in its own try/catch so a connection
+    drop during ROLLBACK does not prevent the unlock attempt. A failed
+    unlock is logged with console.error rather than propagating an
+    exception, preserving normal startup behaviour.
+
+  - api.js: remove the legacy latestLedger field from all /health response
+    bodies (error, degraded, ok) and from /ready. last_ledger is the
+    documented canonical field; the duplicate was causing consumer
+    confusion and risked silent breakage if the field were ever removed.
+    Also removed a stray duplicate export function startApi stub that
+    referenced a non-existent createApp helper and was causing a syntax
+    error that blocked api.test.js from loading.
+
+  Closes [#325](../../issues/325)
+  Closes [#324](../../issues/324)
+
+
 - Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
 
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
@@ -576,6 +595,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`e42cd8b`](../../commit/e42cd8b0c9cdf8b7d4843973a5fd27febcc72818))
 
 - Auto-update CHANGELOG.md [skip ci] ([`aa76762`](../../commit/aa7676255a07306bbb26b01afccc6806926e721c))
 
