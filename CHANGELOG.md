@@ -53,6 +53,54 @@ The contract-metadata LRU cache stored a null ("not registered") result for
   Closes [#355](../../issues/355), [#348](../../issues/348), [#334](../../issues/334), [#330](../../issues/330)
 
 
+- Reset ErrorBoundary on route navigation ([`a950381`](../../commit/a950381345badb992911fc28f8b912865c81a356))
+
+- Accept resetKey prop in ErrorBoundary and reset error state when resetKey changes
+  - Pass location.pathname as resetKey from App.tsx via useLocation
+  - Add tests covering reset on navigation and error state persistence on the same route
+
+  Closes [#335](../../issues/335)
+
+
+- Resolve issues [#312](../../issues/312), [#314](../../issues/314), [#320](../../issues/320), [#321](../../issues/321) ([`0f0e927`](../../commit/0f0e92749399663e75781297d2efb08cceb78ff2))
+
+[#312](../../issues/312) — GET /api/contracts + db.getContracts()
+  - db.getContracts({ q, page, limit }) was already implemented; add route-
+    level tests for GET /api/contracts confirming pagination shape, page/
+    limit/q forwarding, and response fields
+  - Fix duplicate 'export function startApi' in api.js: rename the app-
+    builder to createApp() (already expected by existing tests), and make
+    startApi() call createApp() then listen — eliminates the dead second
+    declaration and the missing createApp reference
+  - Remove unused LRUCache import from api.js
+
+  [#314](../../issues/314) — Rust: canonical event_seq + validate_meta
+  - lib.rs already carries exactly one event_seq (panics NotInitialized)
+    and one validate_meta; both have clear doc-comments explaining their
+    panic semantics — no code change needed, confirmed by grep
+
+  [#320](../../issues/320) — sac.js: log invalid SAC_ASSETS JSON
+  - Replace the silent catch comment with:
+      console.error('[sac] SAC_ASSETS is not valid JSON:', err.message)
+    so operators see a diagnostic in production logs instead of silent
+    asset-decoding failures
+  - Add two new tests in sac.test.js verifying the error is logged and
+    that err.message is appended
+
+  [#321](../../issues/321) — full-text search on events.description
+  - Add migration id 5: ALTER TABLE events ADD COLUMN description_tsv
+    TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', description))
+    STORED + GIN index idx_events_description_tsv
+  - Update getEvents() to use plainto_tsquery('english', q) @@ description_tsv
+    when the query contains only word-safe characters; fall back to ILIKE
+    for queries with special characters (e.g. &, /, +) that to_tsquery
+    cannot parse — keeps O(log n) search in the common case
+  - Add four tests confirming tsquery path, ILIKE fallback, and correct
+    param shapes
+
+  Closes [#312](../../issues/312), [#314](../../issues/314), [#320](../../issues/320), [#321](../../issues/321)
+
+
 - Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
 
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
@@ -171,15 +219,6 @@ Two related issues prevented the indexer CI job from passing:
      and isRateLimitError().
 
   After both fixes: 85 tests, 27 suites, 0 failures
-
-
-- Reset ErrorBoundary on route navigation ([`a950381`](../../commit/a950381345badb992911fc28f8b912865c81a356))
-
-- Accept resetKey prop in ErrorBoundary and reset error state when resetKey changes
-  - Pass location.pathname as resetKey from App.tsx via useLocation
-  - Add tests covering reset on navigation and error state persistence on the same route
-
-  Closes [#335](../../issues/335)
 
 
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
@@ -501,6 +540,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`d275ce4`](../../commit/d275ce4bd562c8f665411bacfcde51ade2cc6bd6))
 
 - Auto-update CHANGELOG.md [skip ci] ([`f758fd5`](../../commit/f758fd5b5dbbd826f98c1ef1cf829a6900a5e22c))
 
