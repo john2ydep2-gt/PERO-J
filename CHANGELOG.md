@@ -471,6 +471,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`25150c0`](../../commit/25150c0b8bf454e45beed77cf96ba083f123d6b8))
+
 - Auto-update CHANGELOG.md [skip ci] ([`c8a3e8f`](../../commit/c8a3e8f51b77932dbd9d3b1357dcf3cd06c24656))
 
 - Auto-update CHANGELOG.md [skip ci] ([`8305968`](../../commit/830596888dd58a177aeebe51f2d0bd7948294481))
@@ -657,6 +659,19 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Persist onchain_seq and submit events to contract ([`e9592ee`](../../commit/e9592ee8f3e61e37766ed13b3251d05100baefb2))
+
+Implements [#322](../../issues/322) and [#323](../../issues/323):
+  - Update db.upsertEvent() to accept and persist onchain_seq from contract submissions
+  - Create contract.js with submitEvent() function to call soroban contract
+  - Update indexer to submit each decoded event to on-chain ExplorerContract
+  - Capture returned onchain_seq and store it in database
+  - Add tests for onchain_seq persistence
+
+  The indexer now populates the on-chain EventDecoder contract, enabling
+  cross-referencing between off-chain DB events and on-chain contract state.
+
 
 - Add Phoenix ABI fixture and auto-register fixtures at startup ([`7eb7434`](../../commit/7eb743476e12058962652e99d406f76925960ccf))
 
