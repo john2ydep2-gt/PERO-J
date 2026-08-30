@@ -119,6 +119,25 @@ describe("db.upsertEvent()", () => {
     const { params } = lastCall();
     assert.equal(params[0], sampleEvent.contract_id);
   });
+
+  it("persists onchain_seq when provided", async () => {
+    const eventWithSeq = { ...sampleEvent, onchain_seq: 42 };
+    await db.upsertEvent(eventWithSeq);
+    const { params } = lastCall();
+    assert.equal(params[params.length - 1], 42, "expected onchain_seq as last parameter");
+  });
+
+  it("passes null for onchain_seq when not provided", async () => {
+    await db.upsertEvent(sampleEvent);
+    const { params } = lastCall();
+    assert.equal(params[params.length - 1], null, "expected null onchain_seq when not provided");
+  });
+
+  it("includes onchain_seq column in INSERT statement", async () => {
+    await db.upsertEvent(sampleEvent);
+    const { sql } = lastCall();
+    assert.ok(sql.includes("onchain_seq"), "expected onchain_seq column in INSERT");
+  });
 });
 
 describe("db.getEvent()", () => {
@@ -163,6 +182,17 @@ describe("db.getEvents()", () => {
       sqls.some((s) => s.includes("contract_id")),
       "expected contract_id filter in query"
     );
+  });
+
+  it("escapes wildcard characters in q for ILIKE searches", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "100% swap_" });
+    const firstSql = _calls[0]?.sql ?? "";
+    const firstParams = _calls[0]?.params ?? [];
+
+    assert.ok(firstSql.toUpperCase().includes("ILIKE"), "expected ILIKE in search query");
+    assert.ok(firstSql.toUpperCase().includes("ESCAPE"), "expected ESCAPE clause");
+    assert.deepEqual(firstParams, ["%100\\% swap\\_%"]);
   });
 
   it("defaults to page 1, limit 25", async () => {
@@ -332,6 +362,16 @@ describe("db.get24hVolume()", () => {
     _nextRow = { volume_raw: "10000000" }; // 1.0000000 with 7 decimals
     const result = await db.get24hVolume("CABC", 7);
     assert.equal(result.volume_scaled, "1.0000000");
+  });
+
+  it("matches JSON objects even with leading whitespace, and excludes non-objects", async () => {
+    _nextRow = { volume_raw: "0" };
+    await db.get24hVolume("CABC");
+    const { sql } = lastCall();
+    assert.ok(!sql.includes("LIKE '{%'"), "should not use the fragile LIKE '{%' heuristic");
+    assert.ok(sql.includes("raw_data ~ '^\\s*\\{'"), "expected regex object-shape check");
+    assert.match(" {\"amount\":\"1\"}", /^\s*\{/);
+    assert.doesNotMatch("[1,2,3]", /^\s*\{/);
   });
 });
 

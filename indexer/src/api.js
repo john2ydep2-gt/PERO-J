@@ -1,5 +1,7 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { StrKey } from "@stellar/stellar-sdk";
+import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
@@ -43,6 +45,14 @@ export function errorHandler(err, req, res, _next) {
     return;
   }
   res.status(500).json({ error: err.message || "Internal Server Error" });
+}
+
+export function isValidStellarAddress(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  const trimmed = value.trim();
+  return StrKey.isValidEd25519PublicKey(trimmed) || StrKey.isValidContract(trimmed);
 }
 
 export function createApp() {
@@ -249,9 +259,13 @@ export function createApp() {
   app.get(
     "/api/wallet/:address",
     asyncHandler(async (req, res) => {
+      const address = req.params.address;
+      if (!isValidStellarAddress(address)) {
+        return res.status(400).json({ error: "Invalid Stellar address" });
+      }
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 25;
-      const result = await db.getWalletEvents(req.params.address, { page, limit });
+      const result = await db.getWalletEvents(address, { page, limit });
       res.json(result);
     })
   );

@@ -38,6 +38,12 @@ const pool = new pg.Pool({
 const MIGRATION_LOCK_ID = 57_056;
 const MAX_PAGE = 200;
 
+function escapeLikePattern(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/[\[%_]/g, "\\$&");
+}
+
 const migrations = [
   {
     id: 1,
@@ -203,8 +209,8 @@ export const db = {
    */
   async upsertEvent(ev) {
     await pool.query(
-      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT DO NOTHING`,
       [
         ev.contract_id,
@@ -216,6 +222,7 @@ export const db = {
         ev.raw_data,
         ev.sac_asset ?? null,
         ev.event_addresses ?? [],
+        ev.onchain_seq ?? null,
       ]
     );
     eventEmitter.emit("event", ev);
@@ -247,18 +254,9 @@ export const db = {
       conditions.push(`function = $${params.length}`);
     }
     if (q) {
-      // Attempt tsvector full-text search first.  to_tsquery rejects queries
-      // that contain special characters (e.g. bare punctuation), so we try to
-      // construct a plainto_tsquery expression and fall back to ILIKE if the
-      // query cannot be parsed as a tsquery.
-      const tsQuerySafe = /^[a-zA-Z0-9 _\-']+$/.test(q);
-      if (tsQuerySafe) {
-        params.push(q);
-        conditions.push(`description_tsv @@ plainto_tsquery('english', $${params.length})`);
-      } else {
-        params.push(`%${q}%`);
-        conditions.push(`description ILIKE $${params.length}`);
-      }
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(`description ILIKE $${params.length} ESCAPE '\\'`);
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
@@ -345,8 +343,11 @@ export const db = {
     const conditions = [];
     const params = [];
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`(name ILIKE $${params.length} OR description ILIKE $${params.length})`);
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(
+        `(name ILIKE $${params.length} ESCAPE '\\' OR description ILIKE $${params.length} ESCAPE '\\')`
+      );
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -378,7 +379,10 @@ export const db = {
        WHERE contract_id = $1
          AND function    = 'transfer'
          AND raw_data IS NOT NULL
-         AND raw_data LIKE '{%'
+         -- Match the first non-whitespace char so only object-shaped JSON
+         -- (tolerating leading whitespace) reaches the ::jsonb cast below;
+         -- arrays and other non-object JSON are excluded, not miscast.
+         AND raw_data ~ '^\\s*\\{'
          AND created_at >= NOW() - INTERVAL '24 hours'`,
       [contractId]
     );
