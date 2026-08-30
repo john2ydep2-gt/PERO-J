@@ -360,3 +360,120 @@ describe("db.getStats()", () => {
   });
 });
 
+describe("db.getContracts()", () => {
+  beforeEach(() => resetMock());
+
+  it("returns { contracts, total, page, limit } pagination shape", async () => {
+    _nextRow = { count: "0" };
+    const result = await db.getContracts();
+    assert.ok("contracts" in result, "missing contracts key");
+    assert.ok("total" in result, "missing total key");
+    assert.ok("page" in result, "missing page key");
+    assert.ok("limit" in result, "missing limit key");
+  });
+
+  it("defaults to page 1, limit 25", async () => {
+    _nextRow = { count: "0" };
+    const result = await db.getContracts();
+    assert.equal(result.page, 1);
+    assert.equal(result.limit, 25);
+  });
+
+  it("queries the contracts table with ORDER BY name ASC", async () => {
+    _nextRow = { count: "0" };
+    await db.getContracts();
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(
+      sqls.some((s) => s.includes("FROM contracts")),
+      "expected query against contracts table"
+    );
+    assert.ok(
+      sqls.some((s) => s.toUpperCase().includes("ORDER BY NAME ASC")),
+      "expected ORDER BY name ASC"
+    );
+  });
+
+  it("includes ILIKE filter when q is provided", async () => {
+    _nextRow = { count: "0" };
+    await db.getContracts({ q: "stellar" });
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(
+      sqls.some((s) => s.toUpperCase().includes("ILIKE")),
+      "expected ILIKE filter in query when q is provided"
+    );
+    const params = _calls.flatMap((c) => c.params ?? []);
+    assert.ok(
+      params.some((p) => typeof p === "string" && p.includes("stellar")),
+      "expected q value in query params"
+    );
+  });
+
+  it("returns the contract rows when found", async () => {
+    _nextRow = { count: "1" };
+    const result = await db.getContracts({ page: 1 });
+    assert.ok(Array.isArray(result.contracts));
+  });
+
+  it("respects custom page and limit", async () => {
+    _nextRow = { count: "0" };
+    const result = await db.getContracts({ page: 3, limit: 10 });
+    assert.equal(result.page, 3);
+    assert.equal(result.limit, 10);
+    // offset should be (3-1)*10 = 20 — verify it's passed to query
+    const params = _calls.flatMap((c) => c.params ?? []);
+    assert.ok(params.includes(20), "expected offset=20 in query params");
+  });
+});
+
+describe("db.getEvents() full-text search (#321)", () => {
+  beforeEach(() => resetMock());
+
+  it("uses plainto_tsquery when q contains only word characters", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "swap usdc" });
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(
+      sqls.some((s) => s.includes("plainto_tsquery")),
+      "expected plainto_tsquery for safe word-only query"
+    );
+    assert.ok(
+      sqls.some((s) => s.includes("description_tsv")),
+      "expected description_tsv column reference"
+    );
+  });
+
+  it("falls back to ILIKE when q contains special characters", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "swap & usdc" });
+    const sqls = _calls.map((c) => c.sql);
+    assert.ok(
+      sqls.some((s) => s.toUpperCase().includes("ILIKE")),
+      "expected ILIKE fallback for queries with special characters"
+    );
+    assert.ok(
+      !sqls.some((s) => s.includes("plainto_tsquery")),
+      "should not use plainto_tsquery for queries with special characters"
+    );
+  });
+
+  it("passes the q value correctly into tsvector query params", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "transfer" });
+    const params = _calls.flatMap((c) => c.params ?? []);
+    assert.ok(
+      params.includes("transfer"),
+      "expected raw q value (no %%) passed for tsquery"
+    );
+  });
+
+  it("passes the q value with % wildcards for ILIKE fallback", async () => {
+    _nextRow = { count: "0" };
+    await db.getEvents({ q: "100 USDC+XLM" });
+    const params = _calls.flatMap((c) => c.params ?? []);
+    assert.ok(
+      params.some((p) => typeof p === "string" && p.startsWith("%") && p.endsWith("%")),
+      "expected %%q%% wildcard pattern for ILIKE fallback"
+    );
+  });
+});
+

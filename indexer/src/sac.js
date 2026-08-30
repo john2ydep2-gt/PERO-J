@@ -41,8 +41,8 @@ function getKnownAssets() {
       if (Array.isArray(parsed)) {
         customAssets = parsed;
       }
-    } catch {
-      // skip malformed SAC_ASSETS JSON
+    } catch (err) {
+      console.error('[sac] SAC_ASSETS is not valid JSON:', err.message);
     }
   }
   return [{ code: "native" }, ...customAssets];

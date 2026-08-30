@@ -1,6 +1,5 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
-import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
@@ -46,7 +45,7 @@ export function errorHandler(err, req, res, _next) {
   res.status(500).json({ error: err.message || "Internal Server Error" });
 }
 
-export function startApi() {
+export function createApp() {
   const app = express();
   app.use(express.json());
 
@@ -319,8 +318,8 @@ export function startApi() {
   return app;
 }
 
-export function startApi(port = PORT) {
+export function startApi() {
   const app = createApp();
-  return app.listen(port, () => console.log(`API listening on :${port}`));
+  return app.listen(PORT, () => console.log(`API listening on :${PORT}`));
 }
 

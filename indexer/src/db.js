@@ -101,6 +101,17 @@ const migrations = [
       UPDATE events SET event_addresses = ARRAY[]::TEXT[] WHERE event_addresses IS NULL;
     `,
   },
+  {
+    id: 5,
+    name: "add_description_tsvector_gin_index",
+    sql: `
+      ALTER TABLE events
+        ADD COLUMN IF NOT EXISTS description_tsv TSVECTOR
+          GENERATED ALWAYS AS (to_tsvector('english', description)) STORED;
+      CREATE INDEX IF NOT EXISTS idx_events_description_tsv
+        ON events USING GIN(description_tsv);
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -236,8 +247,18 @@ export const db = {
       conditions.push(`function = $${params.length}`);
     }
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`description ILIKE $${params.length}`);
+      // Attempt tsvector full-text search first.  to_tsquery rejects queries
+      // that contain special characters (e.g. bare punctuation), so we try to
+      // construct a plainto_tsquery expression and fall back to ILIKE if the
+      // query cannot be parsed as a tsquery.
+      const tsQuerySafe = /^[a-zA-Z0-9 _\-']+$/.test(q);
+      if (tsQuerySafe) {
+        params.push(q);
+        conditions.push(`description_tsv @@ plainto_tsquery('english', $${params.length})`);
+      } else {
+        params.push(`%${q}%`);
+        conditions.push(`description ILIKE $${params.length}`);
+      }
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
