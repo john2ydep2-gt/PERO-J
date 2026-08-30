@@ -8,6 +8,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Validate POST /api/contracts payload before upsert ([`cf7909a`](../../commit/cf7909a22aa84fc64dd6b2dced6998f9ad7e6b3e))
+
+Return a clean 400 for missing/invalid id, name, or functions instead
+  of letting malformed input hit the database and surface an obscure
+  PostgreSQL error. Also fixes a duplicate `startApi` declaration that
+  broke module import.
+
+  Fixes [#311](../../issues/311)
+
+
 - Add Go to Home link and catch-all route for 404 page ([`1ea01b8`](../../commit/1ea01b81ba36c070f63221bb64949d0e25e0e907))
 
 - Add path="*" route to render NotFound component
@@ -540,6 +550,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`0afe35b`](../../commit/0afe35bccfcdd3a23864bd1e215408bcdbfb8880))
 
 - Auto-update CHANGELOG.md [skip ci] ([`d275ce4`](../../commit/d275ce4bd562c8f665411bacfcde51ade2cc6bd6))
 
