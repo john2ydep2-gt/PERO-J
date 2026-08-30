@@ -128,6 +128,15 @@ Two related issues prevented the indexer CI job from passing:
   After both fixes: 85 tests, 27 suites, 0 failures
 
 
+- Reset ErrorBoundary on route navigation ([`a950381`](../../commit/a950381345badb992911fc28f8b912865c81a356))
+
+- Accept resetKey prop in ErrorBoundary and reset error state when resetKey changes
+  - Pass location.pathname as resetKey from App.tsx via useLocation
+  - Add tests covering reset on navigation and error state persistence on the same route
+
+  Closes [#335](../../issues/335)
+
+
 - Add wasm-opt step to make build ([`29c1f1f`](../../commit/29c1f1f33bd31355110994aad385a8a0a8909858))
 
 Add WASM size optimization using wasm-opt -Oz to the build target in Makefile.
@@ -447,6 +456,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`40596c1`](../../commit/40596c172601f056e685b3396601dd081691f583))
 
 - Auto-update CHANGELOG.md [skip ci] ([`552db35`](../../commit/552db35d00e929ba3a3999768af66432465a3878))
 
