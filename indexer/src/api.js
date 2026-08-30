@@ -227,6 +227,11 @@ export function createApp() {
   app.post(
     "/api/contracts",
     asyncHandler(async (req, res) => {
+      const validationError = validateContractPayload(req.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
       const existing = await db.getContractMeta(req.body.id);
       const registeredBy = req.body.registered_by ?? existing?.registered_by;
 
