@@ -265,6 +265,82 @@ describe("decode()", () => {
     assert.ok(result.description.includes("Blend"), "description should include contract name");
   });
 
+  // #306 — stake / unstake
+  it("uses buildDescription for 'stake'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C13 ? { id: C13, name: "Blend", functions: [{ name: "stake" }] } : null;
+
+    const ev = makeRawEvent(C13, "stake", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("200"),
+      xdr.ScVal.scvString("BLND"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "stake");
+    assert.ok(result.description.includes("staked"), "description should say 'staked'");
+    assert.ok(result.description.includes("200"), "description should include amount");
+    assert.ok(result.description.includes("BLND"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'unstake'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C14 ? { id: C14, name: "Blend", functions: [{ name: "unstake" }] } : null;
+
+    const ev = makeRawEvent(C14, "unstake", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("150"),
+      xdr.ScVal.scvString("BLND"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "unstake");
+    assert.ok(result.description.includes("unstaked"), "description should say 'unstaked'");
+    assert.ok(result.description.includes("150"), "description should include amount");
+    assert.ok(result.description.includes("BLND"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  // #307 — deposit / withdraw
+  it("uses buildDescription for 'deposit'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C15 ? { id: C15, name: "Blend", functions: [{ name: "deposit" }] } : null;
+
+    const ev = makeRawEvent(C15, "deposit", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("1000"),
+      xdr.ScVal.scvString("USDC"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "deposit");
+    assert.ok(result.description.includes("deposited"), "description should say 'deposited'");
+    assert.ok(result.description.includes("1000"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+    assert.ok(result.description.includes("into"), "description should say 'into'");
+  });
+
+  it("uses buildDescription for 'withdraw'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C16 ? { id: C16, name: "Blend", functions: [{ name: "withdraw" }] } : null;
+
+    const ev = makeRawEvent(C16, "withdraw", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("750"),
+      xdr.ScVal.scvString("USDC"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "withdraw");
+    assert.ok(result.description.includes("withdrew"), "description should say 'withdrew'");
+    assert.ok(result.description.includes("750"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+    assert.ok(result.description.includes("from"), "description should say 'from'");
+  });
+
   it("labels the contract as SAC when contractId matches XLM SAC", async () => {
 
     // XLM_SAC_ID is already in the SAC map — db returns null (no registered ABI)
