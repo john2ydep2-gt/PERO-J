@@ -8,6 +8,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Re-check contracts registered after negative cache ([`31fe674`](../../commit/31fe674a99901be8dda56190f249d588a1d96138))
+
+The contract-metadata LRU cache stored a null ("not registered") result for
+  the full 60s ABI TTL. If a contract was registered in the DB during that
+  window, subsequent events kept using generic descriptions instead of the newly
+  registered ABI.
+
+  Distinguish "not registered" from "not yet checked": a null lookup is cached
+  with a short, dedicated TTL so a contract registered mid-window is re-discovered
+  promptly, while registered ABIs keep the full 60s cache.
+
+  Closes [#355](../../issues/355), [#348](../../issues/348), [#334](../../issues/334), [#330](../../issues/330)
+
+
 - Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
 
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
@@ -456,6 +470,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`ca198df`](../../commit/ca198df4255301ed2c403fa3fd99793bb8e0076b))
 
 - Auto-update CHANGELOG.md [skip ci] ([`b04a27e`](../../commit/b04a27e324eaa2800f5b73fb96bf5fd95f670c71))
 
