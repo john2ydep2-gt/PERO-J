@@ -19,7 +19,11 @@ export default function ContractPage() {
   const { data: eventsData, isLoading: evLoading } = useQuery({
     queryKey: ["events", id],
     queryFn: () => api.events({ contract: id }),
-    enabled: !!id && !!meta,
+    // Wait until the contract metadata fetch has settled before querying events.
+    // Without !metaLoading, a dangling request fires during the brief window
+    // where meta is still undefined (before the fetch returns null for an
+    // unregistered contract), causing the query to hang in a pending state.
+    enabled: !!id && !metaLoading && !!meta,
   });
   const events = eventsData?.events ?? [];
   const [confirmUpdate, setConfirmUpdate] = useState(false);

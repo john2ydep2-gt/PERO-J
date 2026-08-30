@@ -121,6 +121,24 @@ function buildDescription(fn, args, data, contractName) {
       const [owner, spender, to, amount, token] = args;
       return `Address ${fmt(owner)} (via ${fmt(spender)}) transferred ${amount} ${token ?? ""} to ${fmt(to)} on ${contractName}`;
     }
+    // #306 — staking events (e.g. Blend and other DeFi protocols)
+    case "stake": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} staked ${amount} ${token ?? ""} on ${contractName}`;
+    }
+    case "unstake": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} unstaked ${amount} ${token ?? ""} on ${contractName}`;
+    }
+    // #307 — lending/deposit events (e.g. Blend, Phoenix)
+    case "deposit": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} deposited ${amount} ${token ?? ""} into ${contractName}`;
+    }
+    case "withdraw": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} withdrew ${amount} ${token ?? ""} from ${contractName}`;
+    }
     default:
       return genericDescription(fn, args, data, contractName);
   }
