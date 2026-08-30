@@ -8,6 +8,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Add Go to Home link and catch-all route for 404 page ([`1ea01b8`](../../commit/1ea01b81ba36c070f63221bb64949d0e25e0e907))
+
+- Add path="*" route to render NotFound component
+  - Update NotFound page with Go to Home link
+  - Add text suggesting user check the URL
+  - Ensure page has h1 heading
+
+  Closes [#338](../../issues/338)
+  Closes [#339](../../issues/339)
+
+
 - Replace fragile LIKE '{%' JSON heuristic in get24hVolume ([`e5a35d7`](../../commit/e5a35d75aea2f5f8c7a3995bb32487c4757eff79))
 
 The LIKE pattern rejected valid JSON objects with leading whitespace
@@ -490,6 +501,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`f758fd5`](../../commit/f758fd5b5dbbd826f98c1ef1cf829a6900a5e22c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`5488227`](../../commit/54882272aedaa66723ea7ad9160f87fe7921eb6c))
 
