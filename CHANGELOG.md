@@ -8,6 +8,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Make mapper errors resolve instead of leaving holes ([`a2d03d2`](../../commit/a2d03d2065bd064f13df0b1b764fcf501aa867cc))
+
+In mapWithConcurrency, an unhandled error thrown by the mapper could leave a
+  worker's slot in results undefined, so the caller's
+  Object.values(results).every(Boolean) check could report an inconsistent
+  compliance result. Catch mapper errors and treat the item as non-compliant
+  (false) so every slot always resolves to a boolean.
+
+  Closes [#391](../../issues/391), [#390](../../issues/390), [#387](../../issues/387), [#385](../../issues/385)
+
+
 - Re-check contracts registered after negative cache ([`31fe674`](../../commit/31fe674a99901be8dda56190f249d588a1d96138))
 
 The contract-metadata LRU cache stored a null ("not registered") result for
@@ -470,6 +481,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`83a3473`](../../commit/83a3473beb147c060bb8b08f62032eec8ee4603d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`25150c0`](../../commit/25150c0b8bf454e45beed77cf96ba083f123d6b8))
 
