@@ -178,6 +178,20 @@ describe("decode()", () => {
     assert.ok(result.description.includes("burned"), "description should say 'burned'");
   });
 
+  it("uses buildDescription for 'approve'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C13 ? { id: C13, name: "Token", functions: [{ name: "approve" }] } : null;
+
+    const ev = makeRawEvent(C13, "approve", [scAddress(ADDR_G), scAddress(ADDR_G2)]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "approve");
+    assert.ok(result.description.includes("approved"), "description should say 'approved'");
+    assert.ok(result.description.includes("GCFIRY…"), "description should include from address");
+    assert.ok(result.description.includes("GCATS5…"), "description should include spender address");
+    assert.ok(result.description.includes("Token"), "description should include contract name");
+  });
+
   it("uses buildDescription for 'supply'", async () => {
     db.getContractMeta = async (id) =>
       id === C9 ? { id: C9, name: "Blend", functions: [{ name: "supply" }] } : null;
