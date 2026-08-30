@@ -23,6 +23,7 @@ export default function App() {
             <Route path="/contract/:id" element={<ContractPage />} />
             <Route path="/wallet/:address" element={<WalletPage />} />
             <Route path="/event/:seq" element={<EventPage />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </ErrorBoundary>
