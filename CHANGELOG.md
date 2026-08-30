@@ -8,6 +8,109 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- Validate POST /api/contracts payload before upsert ([`cf7909a`](../../commit/cf7909a22aa84fc64dd6b2dced6998f9ad7e6b3e))
+
+Return a clean 400 for missing/invalid id, name, or functions instead
+  of letting malformed input hit the database and surface an obscure
+  PostgreSQL error. Also fixes a duplicate `startApi` declaration that
+  broke module import.
+
+  Fixes [#311](../../issues/311)
+
+
+- Add Go to Home link and catch-all route for 404 page ([`1ea01b8`](../../commit/1ea01b81ba36c070f63221bb64949d0e25e0e907))
+
+- Add path="*" route to render NotFound component
+  - Update NotFound page with Go to Home link
+  - Add text suggesting user check the URL
+  - Ensure page has h1 heading
+
+  Closes [#338](../../issues/338)
+  Closes [#339](../../issues/339)
+
+
+- Replace fragile LIKE '{%' JSON heuristic in get24hVolume ([`e5a35d7`](../../commit/e5a35d75aea2f5f8c7a3995bb32487c4757eff79))
+
+The LIKE pattern rejected valid JSON objects with leading whitespace
+  and didn't reliably exclude non-object JSON (arrays, strings) before
+  the ::jsonb cast. Match on the first non-whitespace character instead.
+
+  Fixes [#308](../../issues/308)
+
+
+- Make mapper errors resolve instead of leaving holes ([`a2d03d2`](../../commit/a2d03d2065bd064f13df0b1b764fcf501aa867cc))
+
+In mapWithConcurrency, an unhandled error thrown by the mapper could leave a
+  worker's slot in results undefined, so the caller's
+  Object.values(results).every(Boolean) check could report an inconsistent
+  compliance result. Catch mapper errors and treat the item as non-compliant
+  (false) so every slot always resolves to a boolean.
+
+  Closes [#391](../../issues/391), [#390](../../issues/390), [#387](../../issues/387), [#385](../../issues/385)
+
+
+- Re-check contracts registered after negative cache ([`31fe674`](../../commit/31fe674a99901be8dda56190f249d588a1d96138))
+
+The contract-metadata LRU cache stored a null ("not registered") result for
+  the full 60s ABI TTL. If a contract was registered in the DB during that
+  window, subsequent events kept using generic descriptions instead of the newly
+  registered ABI.
+
+  Distinguish "not registered" from "not yet checked": a null lookup is cached
+  with a short, dedicated TTL so a contract registered mid-window is re-discovered
+  promptly, while registered ABIs keep the full 60s cache.
+
+  Closes [#355](../../issues/355), [#348](../../issues/348), [#334](../../issues/334), [#330](../../issues/330)
+
+
+- Reset ErrorBoundary on route navigation ([`a950381`](../../commit/a950381345badb992911fc28f8b912865c81a356))
+
+- Accept resetKey prop in ErrorBoundary and reset error state when resetKey changes
+  - Pass location.pathname as resetKey from App.tsx via useLocation
+  - Add tests covering reset on navigation and error state persistence on the same route
+
+  Closes [#335](../../issues/335)
+
+
+- Resolve issues [#312](../../issues/312), [#314](../../issues/314), [#320](../../issues/320), [#321](../../issues/321) ([`0f0e927`](../../commit/0f0e92749399663e75781297d2efb08cceb78ff2))
+
+[#312](../../issues/312) — GET /api/contracts + db.getContracts()
+  - db.getContracts({ q, page, limit }) was already implemented; add route-
+    level tests for GET /api/contracts confirming pagination shape, page/
+    limit/q forwarding, and response fields
+  - Fix duplicate 'export function startApi' in api.js: rename the app-
+    builder to createApp() (already expected by existing tests), and make
+    startApi() call createApp() then listen — eliminates the dead second
+    declaration and the missing createApp reference
+  - Remove unused LRUCache import from api.js
+
+  [#314](../../issues/314) — Rust: canonical event_seq + validate_meta
+  - lib.rs already carries exactly one event_seq (panics NotInitialized)
+    and one validate_meta; both have clear doc-comments explaining their
+    panic semantics — no code change needed, confirmed by grep
+
+  [#320](../../issues/320) — sac.js: log invalid SAC_ASSETS JSON
+  - Replace the silent catch comment with:
+      console.error('[sac] SAC_ASSETS is not valid JSON:', err.message)
+    so operators see a diagnostic in production logs instead of silent
+    asset-decoding failures
+  - Add two new tests in sac.test.js verifying the error is logged and
+    that err.message is appended
+
+  [#321](../../issues/321) — full-text search on events.description
+  - Add migration id 5: ALTER TABLE events ADD COLUMN description_tsv
+    TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', description))
+    STORED + GIN index idx_events_description_tsv
+  - Update getEvents() to use plainto_tsquery('english', q) @@ description_tsv
+    when the query contains only word-safe characters; fall back to ILIKE
+    for queries with special characters (e.g. &, /, +) that to_tsquery
+    cannot parse — keeps O(log n) search in the common case
+  - Add four tests confirming tsquery path, ILIKE fallback, and correct
+    param shapes
+
+  Closes [#312](../../issues/312), [#314](../../issues/314), [#320](../../issues/320), [#321](../../issues/321)
+
+
 - Add address type guard to fmt() in decoder.js ([`7fe831b`](../../commit/7fe831b7a8c24cf4b10d849eb6c69e421d882f60))
 
 - Restore function filter select dropdown in Home.tsx ([#350](../../issues/350)) ([`70382ae`](../../commit/70382aea6c5b22f67c9e5618317b07a234f62645))
@@ -448,6 +551,28 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`0afe35b`](../../commit/0afe35bccfcdd3a23864bd1e215408bcdbfb8880))
+
+- Auto-update CHANGELOG.md [skip ci] ([`d275ce4`](../../commit/d275ce4bd562c8f665411bacfcde51ade2cc6bd6))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f758fd5`](../../commit/f758fd5b5dbbd826f98c1ef1cf829a6900a5e22c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`5488227`](../../commit/54882272aedaa66723ea7ad9160f87fe7921eb6c))
+
+- Auto-update CHANGELOG.md [skip ci] ([`83a3473`](../../commit/83a3473beb147c060bb8b08f62032eec8ee4603d))
+
+- Auto-update CHANGELOG.md [skip ci] ([`25150c0`](../../commit/25150c0b8bf454e45beed77cf96ba083f123d6b8))
+
+- Auto-update CHANGELOG.md [skip ci] ([`c8a3e8f`](../../commit/c8a3e8f51b77932dbd9d3b1357dcf3cd06c24656))
+
+- Auto-update CHANGELOG.md [skip ci] ([`8305968`](../../commit/830596888dd58a177aeebe51f2d0bd7948294481))
+
+- Auto-update CHANGELOG.md [skip ci] ([`ca198df`](../../commit/ca198df4255301ed2c403fa3fd99793bb8e0076b))
+
+- Auto-update CHANGELOG.md [skip ci] ([`b04a27e`](../../commit/b04a27e324eaa2800f5b73fb96bf5fd95f670c71))
+
+- Auto-update CHANGELOG.md [skip ci] ([`40596c1`](../../commit/40596c172601f056e685b3396601dd081691f583))
+
 - Auto-update CHANGELOG.md [skip ci] ([`552db35`](../../commit/552db35d00e929ba3a3999768af66432465a3878))
 
 - Auto-update CHANGELOG.md [skip ci] ([`dad80c0`](../../commit/dad80c06e149e632f1a7c8fa6ea96e6680c9ff0f))
@@ -624,6 +749,43 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Persist onchain_seq and submit events to contract ([`e9592ee`](../../commit/e9592ee8f3e61e37766ed13b3251d05100baefb2))
+
+Implements [#322](../../issues/322) and [#323](../../issues/323):
+  - Update db.upsertEvent() to accept and persist onchain_seq from contract submissions
+  - Create contract.js with submitEvent() function to call soroban contract
+  - Update indexer to submit each decoded event to on-chain ExplorerContract
+  - Capture returned onchain_seq and store it in database
+  - Add tests for onchain_seq persistence
+
+  The indexer now populates the on-chain EventDecoder contract, enabling
+  cross-referencing between off-chain DB events and on-chain contract state.
+
+
+- Add Phoenix ABI fixture and auto-register fixtures at startup ([`7eb7434`](../../commit/7eb743476e12058962652e99d406f76925960ccf))
+
+Add a Phoenix DEX ABI fixture (phoenix-abi.json) alongside the existing
+  StellarSwap and Blend fixtures, and register all ABI fixtures automatically
+  during indexer startup. This satisfies ROADMAP deliverable 2.5 (ABI metadata
+  for live testnet DEX/lending contracts) and extends decoded coverage to the
+  third major Stellar DEX.
+
+  Registration uses the existing idempotent upsertContractMeta path and tags
+  each row registered_by="fixture".
+
+  Closes [#381](../../issues/381), [#384](../../issues/384), [#380](../../issues/380), [#378](../../issues/378)
+
+
+- Add SEP-41 approve decode case ([`862be45`](../../commit/862be450940e15799515f5d00d2d504d19bb749f))
+
+Add a dedicated buildDescription case for the SEP-41 approve function so
+  allowance flows (DEX router approvals, lending authorizations) render as
+  'Address GA... approved GA... to spend on <contract>' instead of a generic
+  function call.
+
+  Closes [#402](../../issues/402), [#404](../../issues/404), [#397](../../issues/397), [#403](../../issues/403)
+
 
 - Add dedicated expand button for long descriptions in EventTable ([`1a14bf3`](../../commit/1a14bf3abef7b40285eac0201fe2eeb8ff9d55ac))
 

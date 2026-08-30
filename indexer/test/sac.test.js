@@ -56,4 +56,45 @@ describe("sac", () => {
     // Native XLM should still be recognised
     assert.equal(detectSac(NATIVE_CONTRACT_ID).isSac, true);
   });
+
+  it("logs a console.error when SAC_ASSETS contains invalid JSON (#320)", () => {
+    const errors = [];
+    const originalError = console.error;
+    console.error = (...args) => errors.push(args.join(" "));
+
+    try {
+      process.env.SAC_ASSETS = "not-valid-json";
+      reloadSacMap();
+    } finally {
+      console.error = originalError;
+    }
+
+    assert.ok(
+      errors.some((msg) => msg.includes("[sac] SAC_ASSETS is not valid JSON:")),
+      `expected error log about invalid JSON, got: ${JSON.stringify(errors)}`
+    );
+  });
+
+  it("includes the parse error message in the console.error log (#320)", () => {
+    const errors = [];
+    const originalError = console.error;
+    console.error = (...args) => errors.push(args.join(" "));
+
+    try {
+      process.env.SAC_ASSETS = "{broken json";
+      reloadSacMap();
+    } finally {
+      console.error = originalError;
+    }
+
+    // The error message should contain the JSON parse error text
+    const log = errors.find((msg) => msg.includes("[sac] SAC_ASSETS is not valid JSON:"));
+    assert.ok(log, "expected console.error with [sac] SAC_ASSETS prefix");
+    // The error detail (from err.message) must be present, not empty
+    const afterPrefix = log.split("[sac] SAC_ASSETS is not valid JSON:")[1] ?? "";
+    assert.ok(
+      afterPrefix.trim().length > 0,
+      "expected the parse error message to be appended after the prefix"
+    );
+  });
 });
