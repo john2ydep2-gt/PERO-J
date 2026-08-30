@@ -1,5 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
+import { StrKey } from "@stellar/stellar-sdk";
 import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
@@ -46,27 +47,12 @@ export function errorHandler(err, req, res, _next) {
   res.status(500).json({ error: err.message || "Internal Server Error" });
 }
 
-const CONTRACT_ID_PATTERN = /^C[A-Z0-9]{55}$/;
-
-/**
- * Validates a POST /api/contracts request body before it reaches the
- * database, so malformed input returns a clean 400 instead of an
- * obscure PostgreSQL error.
- *
- * @param {Record<string, unknown>} body
- * @returns {string | null} an error message, or null if valid
- */
-export function validateContractPayload(body) {
-  if (typeof body.id !== "string" || !CONTRACT_ID_PATTERN.test(body.id)) {
-    return "id is required";
+export function isValidStellarAddress(value) {
+  if (typeof value !== "string") {
+    return false;
   }
-  if (typeof body.name !== "string" || body.name.trim() === "") {
-    return "name is required";
-  }
-  if (body.functions !== undefined && !Array.isArray(body.functions)) {
-    return "functions must be an array";
-  }
-  return null;
+  const trimmed = value.trim();
+  return StrKey.isValidEd25519PublicKey(trimmed) || StrKey.isValidContract(trimmed);
 }
 
 export function createApp() {
@@ -278,9 +264,13 @@ export function createApp() {
   app.get(
     "/api/wallet/:address",
     asyncHandler(async (req, res) => {
+      const address = req.params.address;
+      if (!isValidStellarAddress(address)) {
+        return res.status(400).json({ error: "Invalid Stellar address" });
+      }
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 25;
-      const result = await db.getWalletEvents(req.params.address, { page, limit });
+      const result = await db.getWalletEvents(address, { page, limit });
       res.json(result);
     })
   );

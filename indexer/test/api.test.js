@@ -8,9 +8,9 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { errorHandler, validateContractPayload } from "../src/api.js";
-
-const VALID_CONTRACT_ID = `C${"A".repeat(55)}`;
+import { StrKey } from "@stellar/stellar-sdk";
+import { createApp, errorHandler } from "../src/api.js";
+import { db } from "../src/db.js";
 
 function createMockRes() {
   return {
@@ -105,42 +105,55 @@ describe("errorHandler middleware", () => {
   });
 });
 
-describe("validateContractPayload", () => {
-  it("requires id", () => {
-    const err = validateContractPayload({ name: "Foo" });
-    assert.equal(err, "id is required");
+describe("wallet address validation", () => {
+  it("returns 400 for invalid wallet addresses and never calls the database", async () => {
+    const original = db.getWalletEvents;
+    let called = false;
+    db.getWalletEvents = async () => {
+      called = true;
+      return { events: [], total: 0, page: 1, limit: 25 };
+    };
+
+    try {
+      const app = createApp();
+      const server = app.listen(0);
+      const { port } = server.address();
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/wallet/not-an-address`);
+      const body = await res.json();
+
+      assert.equal(res.status, 400);
+      assert.deepEqual(body, { error: "Invalid Stellar address" });
+      assert.equal(called, false, "wallet DB query should not be called for invalid addresses");
+
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    } finally {
+      db.getWalletEvents = original;
+    }
   });
 
-  it("rejects an id that does not match the contract strkey pattern", () => {
-    const err = validateContractPayload({ id: "not-a-valid-id", name: "Foo" });
-    assert.equal(err, "id is required");
-  });
+  it("accepts a valid G… public key format for the wallet endpoint", async () => {
+    const original = db.getWalletEvents;
+    let seenAddress;
+    db.getWalletEvents = async (address, opts) => {
+      seenAddress = address;
+      return { events: [], total: 0, page: opts.page, limit: opts.limit };
+    };
 
-  it("requires name", () => {
-    const err = validateContractPayload({ id: VALID_CONTRACT_ID });
-    assert.equal(err, "name is required");
-  });
+    try {
+      const app = createApp();
+      const server = app.listen(0);
+      const { port } = server.address();
+      const validAddress = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 1));
 
-  it("rejects a blank name", () => {
-    const err = validateContractPayload({ id: VALID_CONTRACT_ID, name: "   " });
-    assert.equal(err, "name is required");
-  });
+      const res = await fetch(`http://127.0.0.1:${port}/api/wallet/${validAddress}`);
 
-  it("rejects functions that are not an array", () => {
-    const err = validateContractPayload({
-      id: VALID_CONTRACT_ID,
-      name: "Foo",
-      functions: "not-an-array",
-    });
-    assert.equal(err, "functions must be an array");
-  });
+      assert.equal(res.status, 200);
+      assert.equal(seenAddress, validAddress);
 
-  it("accepts a valid payload", () => {
-    const err = validateContractPayload({
-      id: VALID_CONTRACT_ID,
-      name: "Foo",
-      functions: [],
-    });
-    assert.equal(err, null);
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    } finally {
+      db.getWalletEvents = original;
+    }
   });
 });

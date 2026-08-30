@@ -38,6 +38,12 @@ const pool = new pg.Pool({
 const MIGRATION_LOCK_ID = 57_056;
 const MAX_PAGE = 200;
 
+function escapeLikePattern(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/[\[%_]/g, "\\$&");
+}
+
 const migrations = [
   {
     id: 1,
@@ -192,8 +198,8 @@ export const db = {
    */
   async upsertEvent(ev) {
     await pool.query(
-      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT DO NOTHING`,
       [
         ev.contract_id,
@@ -205,6 +211,7 @@ export const db = {
         ev.raw_data,
         ev.sac_asset ?? null,
         ev.event_addresses ?? [],
+        ev.onchain_seq ?? null,
       ]
     );
     eventEmitter.emit("event", ev);
@@ -236,8 +243,9 @@ export const db = {
       conditions.push(`function = $${params.length}`);
     }
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`description ILIKE $${params.length}`);
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(`description ILIKE $${params.length} ESCAPE '\\'`);
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
@@ -324,8 +332,11 @@ export const db = {
     const conditions = [];
     const params = [];
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`(name ILIKE $${params.length} OR description ILIKE $${params.length})`);
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(
+        `(name ILIKE $${params.length} ESCAPE '\\' OR description ILIKE $${params.length} ESCAPE '\\')`
+      );
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
