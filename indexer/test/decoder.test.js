@@ -49,8 +49,8 @@ const XLM_SAC_ID = new Contract(
 
 // Unique valid contract IDs (derived from deterministic seeds) — one per test
 // so that the 60-second LRU cache in decoder.js never bleeds between tests.
-const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
 ].map((i) => StrKey.encodeContract(Buffer.alloc(32, i)));
 
 
@@ -84,6 +84,31 @@ describe("decode()", () => {
 
     assert.equal(result.function, "myFunc");
     assert.ok(result.description.includes("myFunc"), "description should contain function name");
+  });
+
+  it("re-checks a contract registered after an initial negative lookup", async () => {
+    db.getContractMeta = async () => null;
+    const ev = makeRawEvent(C13, "transfer", [scAddress(ADDR_G), scAddress(ADDR_G2)]);
+
+    // First hit: contract not registered → generic description, negative cached.
+    const first = await decode(ev);
+    assert.ok(first.description.includes("transfer("), "unregistered contract should be generic");
+
+    // Contract becomes registered in the DB during the cache window.
+    db.getContractMeta = async (id) =>
+      id === C13 ? { id: C13, name: "Token", functions: [{ name: "transfer" }] } : null;
+
+    // Immediately after, the negative cache still holds → still generic.
+    const stillGeneric = await decode(ev);
+    assert.ok(
+      stillGeneric.description.includes("transfer("),
+      "negative cache should still be warm before its TTL expires"
+    );
+
+    // After the short negative-cache TTL expires, the now-registered ABI is used.
+    await new Promise((r) => setTimeout(r, 2400));
+    const redecoded = await decode(ev);
+    assert.ok(redecoded.description.includes("transferred"), "registered ABI should now be used");
   });
 
   it("uses buildDescription for 'swap' when ABI is registered", async () => {
@@ -151,6 +176,20 @@ describe("decode()", () => {
     const result = await decode(ev);
     assert.equal(result.function, "burn");
     assert.ok(result.description.includes("burned"), "description should say 'burned'");
+  });
+
+  it("uses buildDescription for 'approve'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C13 ? { id: C13, name: "Token", functions: [{ name: "approve" }] } : null;
+
+    const ev = makeRawEvent(C13, "approve", [scAddress(ADDR_G), scAddress(ADDR_G2)]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "approve");
+    assert.ok(result.description.includes("approved"), "description should say 'approved'");
+    assert.ok(result.description.includes("GCFIRY…"), "description should include from address");
+    assert.ok(result.description.includes("GCATS5…"), "description should include spender address");
+    assert.ok(result.description.includes("Token"), "description should include contract name");
   });
 
   it("uses buildDescription for 'supply'", async () => {
@@ -224,6 +263,82 @@ describe("decode()", () => {
     assert.ok(result.description.includes("100"), "description should include amount");
     assert.ok(result.description.includes("USDC"), "description should include asset");
     assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  // #306 — stake / unstake
+  it("uses buildDescription for 'stake'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C13 ? { id: C13, name: "Blend", functions: [{ name: "stake" }] } : null;
+
+    const ev = makeRawEvent(C13, "stake", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("200"),
+      xdr.ScVal.scvString("BLND"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "stake");
+    assert.ok(result.description.includes("staked"), "description should say 'staked'");
+    assert.ok(result.description.includes("200"), "description should include amount");
+    assert.ok(result.description.includes("BLND"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'unstake'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C14 ? { id: C14, name: "Blend", functions: [{ name: "unstake" }] } : null;
+
+    const ev = makeRawEvent(C14, "unstake", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("150"),
+      xdr.ScVal.scvString("BLND"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "unstake");
+    assert.ok(result.description.includes("unstaked"), "description should say 'unstaked'");
+    assert.ok(result.description.includes("150"), "description should include amount");
+    assert.ok(result.description.includes("BLND"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+  });
+
+  // #307 — deposit / withdraw
+  it("uses buildDescription for 'deposit'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C15 ? { id: C15, name: "Blend", functions: [{ name: "deposit" }] } : null;
+
+    const ev = makeRawEvent(C15, "deposit", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("1000"),
+      xdr.ScVal.scvString("USDC"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "deposit");
+    assert.ok(result.description.includes("deposited"), "description should say 'deposited'");
+    assert.ok(result.description.includes("1000"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+    assert.ok(result.description.includes("into"), "description should say 'into'");
+  });
+
+  it("uses buildDescription for 'withdraw'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C16 ? { id: C16, name: "Blend", functions: [{ name: "withdraw" }] } : null;
+
+    const ev = makeRawEvent(C16, "withdraw", [
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("750"),
+      xdr.ScVal.scvString("USDC"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "withdraw");
+    assert.ok(result.description.includes("withdrew"), "description should say 'withdrew'");
+    assert.ok(result.description.includes("750"), "description should include amount");
+    assert.ok(result.description.includes("USDC"), "description should include token");
+    assert.ok(result.description.includes("Blend"), "description should include contract name");
+    assert.ok(result.description.includes("from"), "description should say 'from'");
   });
 
   it("labels the contract as SAC when contractId matches XLM SAC", async () => {

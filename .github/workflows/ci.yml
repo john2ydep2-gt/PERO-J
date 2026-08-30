@@ -55,10 +55,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run typescript check
+      - name: Run frontend tests and type check
         working-directory: frontend
         run: |
           npm ci
+          npm test
           npx tsc --noEmit
 
   e2e:
