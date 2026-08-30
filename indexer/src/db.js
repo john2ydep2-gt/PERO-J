@@ -171,7 +171,15 @@ export const db = {
       await client.query("ROLLBACK");
       throw err;
     } finally {
-      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]);
+      // The unlock is wrapped in its own try/catch so that a failure here
+      // (e.g. the connection was dropped during ROLLBACK) is logged but does
+      // not mask the original error or block future indexer startups waiting
+      // on the advisory lock being released by the server on disconnect.
+      try {
+        await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]);
+      } catch (unlockErr) {
+        console.error("Failed to release migration advisory lock:", unlockErr);
+      }
       client.release();
     }
   },

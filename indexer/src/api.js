@@ -78,7 +78,6 @@ export function createApp() {
         return res.status(503).json({
           status: "error",
           db: "disconnected",
-          latestLedger: health.lastLedger,
           uptime_seconds: uptimeSeconds,
           lag_seconds: lagSeconds,
           last_ledger: health.lastLedger,
@@ -94,7 +93,6 @@ export function createApp() {
       const body = {
         status,
         db: "connected",
-        latestLedger: health.lastLedger,
         uptime_seconds: uptimeSeconds,
         lag_seconds: lagSeconds,
         last_ledger: health.lastLedger,
@@ -113,7 +111,7 @@ export function createApp() {
       if (!dbConnected) {
         return res.status(503).json({ status: "error", db: "disconnected" });
       }
-      res.status(200).json({ status: "ok", db: "connected", latestLedger: health.lastLedger });
+      res.status(200).json({ status: "ok", db: "connected", last_ledger: health.lastLedger });
     })
   );
 
@@ -337,8 +335,4 @@ export function createApp() {
   return app;
 }
 
-export function startApi() {
-  const app = createApp();
-  return app.listen(PORT, () => console.log(`API listening on :${PORT}`));
-}
 
