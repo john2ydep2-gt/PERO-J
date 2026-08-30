@@ -38,6 +38,12 @@ const pool = new pg.Pool({
 const MIGRATION_LOCK_ID = 57_056;
 const MAX_PAGE = 200;
 
+function escapeLikePattern(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/[\[%_]/g, "\\$&");
+}
+
 const migrations = [
   {
     id: 1,
@@ -236,8 +242,9 @@ export const db = {
       conditions.push(`function = $${params.length}`);
     }
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`description ILIKE $${params.length}`);
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(`description ILIKE $${params.length} ESCAPE '\\'`);
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
@@ -324,8 +331,11 @@ export const db = {
     const conditions = [];
     const params = [];
     if (q) {
-      params.push(`%${q}%`);
-      conditions.push(`(name ILIKE $${params.length} OR description ILIKE $${params.length})`);
+      const escapedQ = escapeLikePattern(q);
+      params.push(`%${escapedQ}%`);
+      conditions.push(
+        `(name ILIKE $${params.length} ESCAPE '\\' OR description ILIKE $${params.length} ESCAPE '\\')`
+      );
     }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
