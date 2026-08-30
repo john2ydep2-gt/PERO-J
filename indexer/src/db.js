@@ -368,7 +368,10 @@ export const db = {
        WHERE contract_id = $1
          AND function    = 'transfer'
          AND raw_data IS NOT NULL
-         AND raw_data LIKE '{%'
+         -- Match the first non-whitespace char so only object-shaped JSON
+         -- (tolerating leading whitespace) reaches the ::jsonb cast below;
+         -- arrays and other non-object JSON are excluded, not miscast.
+         AND raw_data ~ '^\\s*\\{'
          AND created_at >= NOW() - INTERVAL '24 hours'`,
       [contractId]
     );

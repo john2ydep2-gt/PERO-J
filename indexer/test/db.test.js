@@ -363,6 +363,16 @@ describe("db.get24hVolume()", () => {
     const result = await db.get24hVolume("CABC", 7);
     assert.equal(result.volume_scaled, "1.0000000");
   });
+
+  it("matches JSON objects even with leading whitespace, and excludes non-objects", async () => {
+    _nextRow = { volume_raw: "0" };
+    await db.get24hVolume("CABC");
+    const { sql } = lastCall();
+    assert.ok(!sql.includes("LIKE '{%'"), "should not use the fragile LIKE '{%' heuristic");
+    assert.ok(sql.includes("raw_data ~ '^\\s*\\{'"), "expected regex object-shape check");
+    assert.match(" {\"amount\":\"1\"}", /^\s*\{/);
+    assert.doesNotMatch("[1,2,3]", /^\s*\{/);
+  });
 });
 
 describe("db.getStats()", () => {
