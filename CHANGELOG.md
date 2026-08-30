@@ -471,6 +471,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`8305968`](../../commit/830596888dd58a177aeebe51f2d0bd7948294481))
+
 - Auto-update CHANGELOG.md [skip ci] ([`ca198df`](../../commit/ca198df4255301ed2c403fa3fd99793bb8e0076b))
 
 - Auto-update CHANGELOG.md [skip ci] ([`b04a27e`](../../commit/b04a27e324eaa2800f5b73fb96bf5fd95f670c71))
@@ -653,6 +655,16 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Add SEP-41 approve decode case ([`862be45`](../../commit/862be450940e15799515f5d00d2d504d19bb749f))
+
+Add a dedicated buildDescription case for the SEP-41 approve function so
+  allowance flows (DEX router approvals, lending authorizations) render as
+  'Address GA... approved GA... to spend on <contract>' instead of a generic
+  function call.
+
+  Closes [#402](../../issues/402), [#404](../../issues/404), [#397](../../issues/397), [#403](../../issues/403)
+
 
 - Add dedicated expand button for long descriptions in EventTable ([`1a14bf3`](../../commit/1a14bf3abef7b40285eac0201fe2eeb8ff9d55ac))
 
