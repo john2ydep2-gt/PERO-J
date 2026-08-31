@@ -49,8 +49,8 @@ const XLM_SAC_ID = new Contract(
 
 // Unique valid contract IDs (derived from deterministic seeds) — one per test
 // so that the 60-second LRU cache in decoder.js never bleeds between tests.
-const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C17, C18] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 18,
 ].map((i) => StrKey.encodeContract(Buffer.alloc(32, i)));
 
 
@@ -58,7 +58,7 @@ const [C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13] = [
 // Import db first, replace getContractMeta, then import decode.
 
 import { db } from "../src/db.js";
-import { decode, fmt } from "../src/decoder.js";
+import { decode, fmt, evictContractMeta } from "../src/decoder.js";
 
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -339,6 +339,77 @@ describe("decode()", () => {
     assert.ok(result.description.includes("USDC"), "description should include token");
     assert.ok(result.description.includes("Blend"), "description should include contract name");
     assert.ok(result.description.includes("from"), "description should say 'from'");
+  });
+
+  it("uses buildDescription for 'transfer_from'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C17 ? { id: C17, name: "DexRouter", functions: [{ name: "transfer_from" }] } : null;
+
+    const ev = makeRawEvent(C17, "transfer_from", [
+      scAddress(ADDR_G),
+      scAddress(ADDR_G2),
+      scAddress(ADDR_G),
+      xdr.ScVal.scvString("50"),
+      xdr.ScVal.scvString("TOKEN"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "transfer_from");
+    assert.ok(result.description.includes("transferred"), "description should say 'transferred'");
+    assert.ok(result.description.includes("via"), "description should name the spender");
+    assert.ok(result.description.includes("50"), "description should include amount");
+    assert.ok(result.description.includes("TOKEN"), "description should include token");
+    assert.ok(result.description.includes("DexRouter"), "description should include contract name");
+  });
+
+  it("uses buildDescription for 'burn_from'", async () => {
+    db.getContractMeta = async (id) =>
+      id === C18 ? { id: C18, name: "LendCo", functions: [{ name: "burn_from" }] } : null;
+
+    const ev = makeRawEvent(C18, "burn_from", [
+      scAddress(ADDR_G),
+      scAddress(ADDR_G2),
+      xdr.ScVal.scvString("25"),
+      xdr.ScVal.scvString("TOKEN"),
+    ]);
+
+    const result = await decode(ev);
+    assert.equal(result.function, "burn_from");
+    assert.ok(result.description.includes("burned"), "description should say 'burned'");
+    assert.ok(result.description.includes("via"), "description should name the spender");
+    assert.ok(result.description.includes("25"), "description should include amount");
+    assert.ok(result.description.includes("TOKEN"), "description should include token");
+    assert.ok(result.description.includes("LendCo"), "description should include contract name");
+  });
+
+  it("evictContractMeta forces a fresh metadata fetch on the next decode", async () => {
+    const CID = "CCCCCUQ7P5J7Y2Z3VQ5T2VX4U7J5YVZ6Q7P5J7Y2Z3VQ5T2VX4U7J5YA";
+    db.getContractMeta = async (id) =>
+      id === CID ? { id: CID, name: "OldName", functions: [{ name: "transfer" }] } : null;
+
+    const ev = makeRawEvent(CID, "transfer", [scAddress(ADDR_G), scAddress(ADDR_G2)]);
+
+    const first = await decode(ev);
+    assert.ok(first.description.includes("OldName"), "first decode should use cached ABI name");
+
+    // ABI is updated on-chain while the 60s cache is still warm.
+    db.getContractMeta = async (id) =>
+      id === CID ? { id: CID, name: "NewName", functions: [{ name: "transfer" }] } : null;
+
+    // Without eviction, the cache would still serve OldName.
+    const stale = await decode(ev);
+    assert.ok(stale.description.includes("OldName"), "still stale before eviction");
+
+    // Evict the entry, then the next decode must re-fetch fresh metadata.
+    evictContractMeta(CID);
+    const fresh = await decode(ev);
+    assert.ok(fresh.description.includes("NewName"), "eviction should force a fresh metadata fetch");
+  });
+
+  it("evictContractMeta ignores empty contract ids", async () => {
+    db.getContractMeta = async () => null;
+    assert.doesNotThrow(() => evictContractMeta(""));
+    assert.doesNotThrow(() => evictContractMeta(null));
   });
 
   it("labels the contract as SAC when contractId matches XLM SAC", async () => {

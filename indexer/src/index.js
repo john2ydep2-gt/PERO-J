@@ -1,9 +1,9 @@
 import dotenv from "dotenv";
-import { SorobanRpc } from "@stellar/stellar-sdk";
+import { SorobanRpc, StrKey } from "@stellar/stellar-sdk";
 import { startApi } from "./api.js";
 import { db } from "./db.js";
 import { registerFixtures } from "./registerFixtures.js";
-import { decode } from "./decoder.js";
+import { decode, evictContractMeta } from "./decoder.js";
 import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
 import { submitEvent } from "./contract.js";
@@ -16,6 +16,7 @@ const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
 const POLL_MS = Number(process.env.POLL_MS || 5000);
 const RPC_ERROR_THRESHOLD = 3;
+const EXPLORER_CONTRACT_ID = process.env.SOROBAN_EXPLORER_CONTRACT_ID;
 
 let rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
@@ -43,6 +44,17 @@ async function indexLedger(ledger) {
   });
 
   for (const ev of res.events) {
+    // On-chain `update` events from the explorer contract let us invalidate
+    // the in-memory ABI cache immediately, instead of waiting for the 60s LRU
+    // TTL to expire, so an ABI update is reflected near-instantly.
+    if (isExplorerUpdateEvent(ev)) {
+      const targetContractId = updateEventContractId(ev);
+      if (targetContractId) {
+        evictContractMeta(targetContractId);
+      }
+      continue;
+    }
+
     const decoded = await decode(ev);
     const onchain_seq = await submitEvent(decoded);
     if (onchain_seq !== null) {
@@ -57,6 +69,51 @@ async function indexLedger(ledger) {
   health.lastLedger = res.latestLedger;
 
   return res.latestLedger;
+}
+
+/**
+ * Return true when an event is the explorer contract's `update` event, which
+ * signals that a registered contract's ABI metadata changed on-chain.
+ *
+ * The first topic is the `update` symbol; the second is the target contract's
+ * raw 32-byte id held in `BytesN<32>`.
+ *
+ * @param {object} ev - Raw event object from SorobanRpc.getEvents()
+ * @returns {boolean}
+ */
+function isExplorerUpdateEvent(ev) {
+  if (!EXPLORER_CONTRACT_ID || ev.contractId !== EXPLORER_CONTRACT_ID) {
+    return false;
+  }
+  const topic = ev.topic?.[0];
+  if (!topic) {
+    return false;
+  }
+  try {
+    return topic.value()?.sym() === "update";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract the strkey contract id (C…) of the contract whose ABI was updated
+ * from an explorer `update` event, or null if it cannot be recovered.
+ *
+ * @param {object} ev - Raw event object from SorobanRpc.getEvents()
+ * @returns {string|null}
+ */
+function updateEventContractId(ev) {
+  const topic = ev.topic?.[1];
+  if (!topic) {
+    return null;
+  }
+  try {
+    const bytes = topic.bytes();
+    return StrKey.encodeContract(bytes);
+  } catch {
+    return null;
+  }
 }
 
 let shuttingDown = false;

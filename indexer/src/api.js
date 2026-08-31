@@ -285,6 +285,7 @@ export function createApp() {
 
       // Allow caller to bypass the metadata lookup with an explicit decimals override.
       let decimals;
+      let metadataWarning = null;
       if (req.query.decimals !== undefined) {
         const parsed = parseInt(req.query.decimals, 10);
         if (isNaN(parsed) || parsed < 0 || parsed > 38) {
@@ -297,13 +298,22 @@ export function createApp() {
         try {
           const meta = await fetchTokenMetadata(contractId);
           decimals = meta.decimals;
-        } catch {
-          /* use default */
+        } catch (err) {
+          console.warn(
+            `[volume] metadata fetch failed for ${contractId} — using default decimals=7:`,
+            err?.message ?? err
+          );
+          metadataWarning = "decimals defaulted to 7";
         }
       }
 
       const volume = await db.get24hVolume(contractId, decimals);
-      res.json({ contract_id: contractId, window: "24h", ...volume });
+      res.json({
+        contract_id: contractId,
+        window: "24h",
+        ...volume,
+        ...(metadataWarning ? { metadata_warning: metadataWarning } : {}),
+      });
     })
   );
 
