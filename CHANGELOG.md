@@ -8,6 +8,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- React keys, search query, and debounce in EventTable and Home ([`b3be6a2`](../../commit/b3be6a2cc8b51288676a183ef53944eafffeea16))
+
+- EventTable.tsx ([#303](../../issues/303)): wrap each event pair in <React.Fragment key={ev.seq}>
+    so React uses a stable identity; remove inline key props from individual <tr>
+    elements that caused the key to be placed on the wrong node
+  - Home.tsx ([#302](../../issues/302)): introduce debouncedSearchQuery (useEffect + 300 ms setTimeout)
+    and use it in the useQuery key and api.events() call; debounce clears on unmount
+  - Home.tsx ([#301](../../issues/301)): use debouncedSearchQuery in queryKey and pass it as the q
+    param to api.events() so description search actually filters results
+  - Home.tsx: fix undefined references useCustom → customFn and activeFn → effectiveFn
+
+  Closes [#301](../../issues/301), [#302](../../issues/302), [#303](../../issues/303)
+
+
 - Validate POST /api/contracts payload before upsert ([`cf7909a`](../../commit/cf7909a22aa84fc64dd6b2dced6998f9ad7e6b3e))
 
 Return a clean 400 for missing/invalid id, name, or functions instead
@@ -595,6 +609,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`f8cc6bd`](../../commit/f8cc6bd42ef625dfc6d3fb8e828f00a706c061ab))
 
 - Auto-update CHANGELOG.md [skip ci] ([`64d24c3`](../../commit/64d24c36bdec3fc993011128f6fb39fd5bd928bd))
 
