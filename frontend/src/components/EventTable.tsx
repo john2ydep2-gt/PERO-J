@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import type { DecodedEvent } from "../api";
 
@@ -58,8 +58,8 @@ export default function EventTable({
             const isExpanded = expandedSeq === ev.seq;
             const isLongDescription = ev.description.length > 60;
             return (
-              <>
-                <tr key={`row-${ev.seq}`} style={{ borderBottom: "1px solid var(--border)" }}>
+              <React.Fragment key={ev.seq}>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={td}>
                     <Link to={`/event/${ev.seq}`}>#{ev.seq}</Link>
                   </td>
@@ -106,7 +106,7 @@ export default function EventTable({
                   </td>
                 </tr>
                 {isExpanded && isLongDescription && (
-                  <tr key={`expand-${ev.seq}`} style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-secondary)" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-secondary)" }}>
                     <td colSpan={4} style={{ ...td, padding: 16 }}>
                       <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>Full description:</div>
                       <div style={{ fontFamily: "monospace", fontSize: 12, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
@@ -115,7 +115,7 @@ export default function EventTable({
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             );
           })}
         </tbody>
