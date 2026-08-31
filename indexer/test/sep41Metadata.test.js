@@ -74,6 +74,23 @@ describe("fetchTokenMetadata()", () => {
     assert.equal(meta.decimals, 6);
   });
 
+  it("retries with sequence 1 when source account lookup fails", async () => {
+    let calls = 0;
+    _stubbedSimulate = async () => {
+      calls += 1;
+      if (calls === 1) {
+        return { error: "sourceAccountNotFound" };
+      }
+      return simOk(scvString("USDC"));
+    };
+
+    const meta = await fetchTokenMetadata(nextId());
+    assert.equal(meta.name, "USDC");
+    assert.equal(meta.symbol, "");
+    assert.equal(meta.decimals, 7);
+    assert.equal(calls, 2);
+  });
+
   it("coerces void returns to empty string / default 7 decimals", async () => {
     _stubbedSimulate = async () => simOk(scvVoid());
     const meta = await fetchTokenMetadata(nextId());
