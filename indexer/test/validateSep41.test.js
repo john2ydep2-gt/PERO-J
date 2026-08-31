@@ -41,7 +41,11 @@ SorobanRpc.Server.prototype.simulateTransaction = async function (_tx) {
   return simSuccess();
 };
 
-import { validateSep41, mapWithConcurrency } from "../src/validateSep41.js";
+import {
+  validateSep41,
+  mapWithConcurrency,
+  isMissingFunctionError,
+} from "../src/validateSep41.js";
 
 const CONTRACT_ID = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
 
@@ -51,6 +55,17 @@ const ALL_SEP41_FUNCTIONS = [
 ];
 
 // ── tests ─────────────────────────────────────────────────────────────────────
+
+describe("isMissingFunctionError()", () => {
+  it("matches host-style fn_not_found errors", () => {
+    assert.equal(isMissingFunctionError("HostError: fn_not_found"), true);
+  });
+
+  it("does not misclassify non-function errors", () => {
+    assert.equal(isMissingFunctionError("contract error: unauthorized"), false);
+    assert.equal(isMissingFunctionError("HostError: underflow"), false);
+  });
+});
 
 describe("validateSep41() — fully compliant contract", () => {
   it("returns compliant: true when all 10 functions succeed", async () => {

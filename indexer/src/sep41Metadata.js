@@ -16,10 +16,17 @@ import {
 
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE = process.env.NETWORK_PASSPHRASE || Networks.TESTNET;
-// Dummy source account — simulation never submits, so balance doesn't matter.
-// Note: The dummy account must exist on the target network, or configure process.env.OPERATIONAL_ACCOUNT.
-const DUMMY_SOURCE =
-  process.env.OPERATIONAL_ACCOUNT || "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
+const DUMMY_SOURCE_FALLBACK =
+  "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
+const OPERATIONAL_ACCOUNT = process.env.OPERATIONAL_ACCOUNT || DUMMY_SOURCE_FALLBACK;
+const USING_DUMMY_SOURCE = !process.env.OPERATIONAL_ACCOUNT && !String(NETWORK_PASSPHRASE).toLowerCase().includes("testnet");
+
+if (USING_DUMMY_SOURCE) {
+  console.warn(
+    "OPERATIONAL_ACCOUNT is not set for a non-testnet network; falling back to the built-in dummy source account. " +
+      "This may fail if the account does not exist on the target network. Set OPERATIONAL_ACCOUNT to a funded source account."
+  );
+}
 
 const rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 const METADATA_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -41,7 +48,7 @@ function getContract(contractId) {
  * @param {string} [sequence="0"]
  */
 async function simulateCall(contractId, method, sequence = "0") {
-  const account = new Account(DUMMY_SOURCE, sequence);
+  const account = new Account(OPERATIONAL_ACCOUNT, sequence);
   const contract = getContract(contractId);
   const tx = new TransactionBuilder(account, {
     fee: "100",
@@ -55,10 +62,14 @@ async function simulateCall(contractId, method, sequence = "0") {
   if (SorobanRpc.Api.isSimulationError(result)) {
     const errorStr =
       typeof result.error === "string" ? result.error : JSON.stringify(result.error || "");
+    const lower = errorStr.toLowerCase();
     if (
       sequence === "0" &&
-      (errorStr.includes("sourceAccountNotFound") ||
-        errorStr.toLowerCase().includes("source account not found"))
+      (/sourceaccountnotfound/i.test(errorStr) ||
+        /source account not found/i.test(lower) ||
+        /account.*not found/i.test(lower) ||
+        /account.*does not exist/i.test(lower) ||
+        /no account.*sequence/i.test(lower))
     ) {
       return simulateCall(contractId, method, "1");
     }
