@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api";
 import EventTable from "../components/EventTable";
@@ -8,7 +8,16 @@ export default function Home() {
   const [fnFilter, setFnFilter] = useState("");
   const [customFn, setCustomFn] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [page, setPage] = useState(1);
+
+  // Debounce searchQuery by 300 ms — avoids firing a request on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const { data: functions = [] } = useQuery({
     queryKey: ["distinctFunctions"],
@@ -19,13 +28,13 @@ export default function Home() {
   const effectiveFn = customFn || fnFilter || undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["events", effectiveFn, searchQuery, page],
-    queryFn: () => api.events({ fn: effectiveFn, q: searchQuery || undefined, page }),
+    queryKey: ["events", effectiveFn, debouncedSearchQuery, page],
+    queryFn: () => api.events({ fn: effectiveFn, q: debouncedSearchQuery || undefined, page }),
   });
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
-  const hasActiveFilter = Boolean((useCustom ? customFn : fnFilter).trim());
+  const hasActiveFilter = Boolean((customFn || fnFilter).trim());
 
   const handleFunctionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -88,7 +97,7 @@ export default function Home() {
       ) : total > 0 ? (
         <div style={{ fontSize: 13, color: "var(--muted)" }}>
           Showing {events.length} of {total.toLocaleString()} events
-          {activeFn ? ` (filtered by function: ${activeFn})` : ""}
+          {effectiveFn ? ` (filtered by function: ${effectiveFn})` : ""}
         </div>
       ) : null}
 
