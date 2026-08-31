@@ -610,6 +610,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`1bf46a8`](../../commit/1bf46a8a9f247b1f3ab5301245ba80e0df0ba2b9))
+
 - Auto-update CHANGELOG.md [skip ci] ([`073354b`](../../commit/073354b00b627491be90c82011d15c0da5020592))
 
 - Auto-update CHANGELOG.md [skip ci] ([`f8cc6bd`](../../commit/f8cc6bd42ef625dfc6d3fb8e828f00a706c061ab))
@@ -818,6 +820,20 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Document admin key loss recovery, add burn_from decoder, cache invalidation, and volume metadata warning ([`4ded529`](../../commit/4ded5297828e1097f9a0880d91ceb99ae2ffb0ab))
+
+- SECURITY.md: expand Emergency Recovery to document consequences of losing
+    the admin key (permanent un-administrability), prevention (hardware wallet,
+    multi-sig), and the redeployment migration procedure for registered contracts
+  - decoder: add burn_from SEP-41 case and export evictContractMeta for ABI
+    cache invalidation
+  - index: handle explorer 'update' events to evict stale ABI cache entries
+    near-instantly instead of waiting for the 60s LRU TTL
+  - api: log a warning and add metadata_warning field to /api/tokens/:id/volume
+    when token metadata fetch fails and decimals default to 7
+  - tests: add decoder coverage for burn_from and cache eviction
+
 
 - Cache distinct functions with 60s TTL ([`4db23da`](../../commit/4db23dace61a67f5958f7ca3df211c840149c0bb))
 
