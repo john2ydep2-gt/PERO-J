@@ -139,6 +139,14 @@ function buildDescription(fn, args, data, contractName) {
       const [from, spender] = args;
       return `Address ${fmt(from)} approved ${fmt(spender)} to spend on ${contractName}`;
     }
+    case "stake": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} staked ${amount} ${token ?? ""} on ${contractName}`;
+    }
+    case "unstake": {
+      const [from, amount, token] = args;
+      return `Address ${fmt(from)} unstaked ${amount} ${token ?? ""} on ${contractName}`;
+    }
     default:
       return genericDescription(fn, args, data, contractName);
   }
