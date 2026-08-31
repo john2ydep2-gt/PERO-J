@@ -610,6 +610,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`073354b`](../../commit/073354b00b627491be90c82011d15c0da5020592))
+
 - Auto-update CHANGELOG.md [skip ci] ([`f8cc6bd`](../../commit/f8cc6bd42ef625dfc6d3fb8e828f00a706c061ab))
 
 - Auto-update CHANGELOG.md [skip ci] ([`64d24c3`](../../commit/64d24c36bdec3fc993011128f6fb39fd5bd928bd))
@@ -816,6 +818,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Cache distinct functions with 60s TTL ([`4db23da`](../../commit/4db23dace61a67f5958f7ca3df211c840149c0bb))
 
 - Persist onchain_seq and submit events to contract ([`e9592ee`](../../commit/e9592ee8f3e61e37766ed13b3251d05100baefb2))
 
