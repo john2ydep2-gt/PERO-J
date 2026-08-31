@@ -1,7 +1,6 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { StrKey } from "@stellar/stellar-sdk";
-import { LRUCache } from "lru-cache";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
@@ -57,6 +56,7 @@ export function isValidStellarAddress(value) {
 
 export function createApp() {
   const app = express();
+  let distinctFunctionsCache = null;
   app.use(express.json());
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
@@ -130,8 +130,22 @@ export function createApp() {
   app.get(
     "/api/functions",
     asyncHandler(async (req, res) => {
+      const now = Date.now();
+      const cacheIsFresh =
+        distinctFunctionsCache !== null && distinctFunctionsCache.expiresAt > now;
+
+      if (cacheIsFresh) {
+        res.setHeader("Cache-Control", "public, max-age=60");
+        return res.json(distinctFunctionsCache.value);
+      }
+
       const result = await db.getDistinctFunctions();
-      res.json(result);
+      distinctFunctionsCache = {
+        value: result,
+        expiresAt: now + 60_000,
+      };
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.json(result);
     })
   );
 
@@ -333,6 +347,11 @@ export function createApp() {
   app.use(errorHandler);
 
   return app;
+}
+
+export function startApi(port = Number(PORT)) {
+  const app = createApp();
+  return app.listen(port);
 }
 
 

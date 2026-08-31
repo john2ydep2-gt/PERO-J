@@ -105,6 +105,59 @@ describe("errorHandler middleware", () => {
   });
 });
 
+describe("GET /api/functions cache", () => {
+  it("reuses the cached result for 60 seconds and refreshes after expiry", async () => {
+    const original = db.getDistinctFunctions;
+    const originalNow = Date.now;
+    let callCount = 0;
+    let now = 1_700_000_000_000;
+
+    db.getDistinctFunctions = async () => {
+      callCount += 1;
+      return ["set_price", "transfer"];
+    };
+    Date.now = () => now;
+
+    try {
+      const app = createApp();
+      const server = app.listen(0);
+      const { port } = server.address();
+
+      const firstRes = await fetch(`http://127.0.0.1:${port}/api/functions`);
+      assert.equal(firstRes.status, 200);
+      assert.equal(callCount, 1, "first request should hit the database");
+      assert.equal(
+        firstRes.headers.get("cache-control"),
+        "public, max-age=60",
+        "first response should include the cache header"
+      );
+      assert.deepEqual(await firstRes.json(), ["set_price", "transfer"]);
+
+      now += 30_000;
+      const secondRes = await fetch(`http://127.0.0.1:${port}/api/functions`);
+      assert.equal(secondRes.status, 200);
+      assert.equal(callCount, 1, "second request within 60s should not hit the database");
+      assert.deepEqual(await secondRes.json(), ["set_price", "transfer"]);
+      assert.equal(
+        secondRes.headers.get("cache-control"),
+        "public, max-age=60",
+        "cached response should include the cache header"
+      );
+
+      now += 31_000;
+      const thirdRes = await fetch(`http://127.0.0.1:${port}/api/functions`);
+      assert.equal(thirdRes.status, 200);
+      assert.equal(callCount, 2, "request after the 60s TTL should fetch again");
+      assert.deepEqual(await thirdRes.json(), ["set_price", "transfer"]);
+
+      await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    } finally {
+      db.getDistinctFunctions = original;
+      Date.now = originalNow;
+    }
+  });
+});
+
 describe("wallet address validation", () => {
   it("returns 400 for invalid wallet addresses and never calls the database", async () => {
     const original = db.getWalletEvents;
