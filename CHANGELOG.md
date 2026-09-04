@@ -8,6 +8,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Bug Fixes
 
+- React keys, search query, and debounce in EventTable and Home ([`b3be6a2`](../../commit/b3be6a2cc8b51288676a183ef53944eafffeea16))
+
+- EventTable.tsx ([#303](../../issues/303)): wrap each event pair in <React.Fragment key={ev.seq}>
+    so React uses a stable identity; remove inline key props from individual <tr>
+    elements that caused the key to be placed on the wrong node
+  - Home.tsx ([#302](../../issues/302)): introduce debouncedSearchQuery (useEffect + 300 ms setTimeout)
+    and use it in the useQuery key and api.events() call; debounce clears on unmount
+  - Home.tsx ([#301](../../issues/301)): use debouncedSearchQuery in queryKey and pass it as the q
+    param to api.events() so description search actually filters results
+  - Home.tsx: fix undefined references useCustom → customFn and activeFn → effectiveFn
+
+  Closes [#301](../../issues/301), [#302](../../issues/302), [#303](../../issues/303)
+
+
 - Validate POST /api/contracts payload before upsert ([`cf7909a`](../../commit/cf7909a22aa84fc64dd6b2dced6998f9ad7e6b3e))
 
 Return a clean 400 for missing/invalid id, name, or functions instead
@@ -596,6 +610,14 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`1bf46a8`](../../commit/1bf46a8a9f247b1f3ab5301245ba80e0df0ba2b9))
+
+- Auto-update CHANGELOG.md [skip ci] ([`073354b`](../../commit/073354b00b627491be90c82011d15c0da5020592))
+
+- Auto-update CHANGELOG.md [skip ci] ([`f8cc6bd`](../../commit/f8cc6bd42ef625dfc6d3fb8e828f00a706c061ab))
+
+- Auto-update CHANGELOG.md [skip ci] ([`64d24c3`](../../commit/64d24c36bdec3fc993011128f6fb39fd5bd928bd))
+
 - Auto-update CHANGELOG.md [skip ci] ([`e42cd8b`](../../commit/e42cd8b0c9cdf8b7d4843973a5fd27febcc72818))
 
 - Auto-update CHANGELOG.md [skip ci] ([`aa76762`](../../commit/aa7676255a07306bbb26b01afccc6806926e721c))
@@ -798,6 +820,22 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Document admin key loss recovery, add burn_from decoder, cache invalidation, and volume metadata warning ([`4ded529`](../../commit/4ded5297828e1097f9a0880d91ceb99ae2ffb0ab))
+
+- SECURITY.md: expand Emergency Recovery to document consequences of losing
+    the admin key (permanent un-administrability), prevention (hardware wallet,
+    multi-sig), and the redeployment migration procedure for registered contracts
+  - decoder: add burn_from SEP-41 case and export evictContractMeta for ABI
+    cache invalidation
+  - index: handle explorer 'update' events to evict stale ABI cache entries
+    near-instantly instead of waiting for the 60s LRU TTL
+  - api: log a warning and add metadata_warning field to /api/tokens/:id/volume
+    when token metadata fetch fails and decimals default to 7
+  - tests: add decoder coverage for burn_from and cache eviction
+
+
+- Cache distinct functions with 60s TTL ([`4db23da`](../../commit/4db23dace61a67f5958f7ca3df211c840149c0bb))
 
 - Persist onchain_seq and submit events to contract ([`e9592ee`](../../commit/e9592ee8f3e61e37766ed13b3251d05100baefb2))
 

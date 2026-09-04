@@ -120,10 +120,23 @@ If you lose access to your Stellar private key (secret key), there is **no way t
 - **No support recovery** — Stellar development support cannot recover lost keys
 - **Contract redeployment required** — If an admin key is lost, the only option is to deploy a new contract instance
 
+#### Consequences of Losing the Admin Key
+
+Because `transfer_admin` requires authorization from **both** the current admin and the new admin, a lost admin key leaves the deployed contract **permanently un-administrable**. Once the current admin's secret key is gone, no other party can co-sign the transfer, so the existing contract instance can never change ownership again. In practical terms this means:
+
+- **No new indexers can be added** — the `IndexerAllowlist` can no longer be modified, so no trusted event submitters can be added to the running contract
+- **Contract metadata can no longer be updated by the admin** — `update_contract` and `register_contract` cannot be performed by the existing admin key
+- **No further on-chain administrative actions** — any future admin-only operation is blocked for that contract instance
+
+The indexer for the network continues to run off the contract's recorded state, but no administrative changes are possible on the locked instance. **There is no on-chain recovery mechanism** — this is a deliberate security property (a lost key must not grant anyone else control).
+
+> **Out of scope (by design):** on-chain key recovery, time-locked admin override, or any mechanism that could let a third party seize an account. These would weaken the security model.
+
 ### Recommendations
 
 - **Backup your keys securely** — Store private keys in multiple secure locations
-- **Use hardware wallets** — For significant funds, use hardware wallet solutions
+- **Use hardware wallets** — For significant funds and especially for the admin key, use hardware wallet solutions (Ledger/Trezor)
+- **Prefer multi-sig for the admin key** — Holding the admin key in a multi-signature account (see the [Admin Transfer Procedure](#admin-transfer-procedure) for `transfer_admin`) spreads the trust and protects against a single lost key permanently locking the contract
 - **Test key recovery** — Verify you can access your account from a backup before storing value
 - **Document key locations** — Keep a secure record of where keys are stored (not the keys themselves)
 
@@ -134,6 +147,17 @@ If you lose access to your Stellar private key (secret key), there is **no way t
 3. **Update configurations** — Update all references to the old contract address
 4. **Notify stakeholders** — Inform users of the contract address change
 
+#### Redeployment & Migration of Registered Contracts
+
+Since a lost admin key cannot be recovered and the existing contract instance is un-administrable, the only recovery path is **redeployment**. The migration procedure is:
+
+1. **Deploy a new contract instance** using a fresh, securely-held admin key (hardware wallet or multi-sig preferred)
+2. **Re-register contract metadata** on the new instance — call `register_contract` for each `ContractMeta` that existed on the old instance, using the same ABI data
+3. **Rebuild the indexer allowlist** on the new instance — re-add each trusted indexer to `IndexerAllowlist` via the admin key
+4. **Repoint the indexer** to the new contract address (update `SOROBAN_EXPLORER_CONTRACT_ID`) and re-run `submit_event` submissions against the new instance
+5. **Update downstream references** — change any configuration, frontend, or monitoring that references the old contract address to use the new one
+6. **Notify stakeholders** — document the new contract address and any historical event gaps so consumers can adjust
+
 **Warning:** Any assets or contracts associated with a lost key are permanently inaccessible. This is by design for security — there is no central authority that can recover lost keys.
 
 ## Contact
@@ -142,5 +166,5 @@ For non-security questions or general inquiries, please open a GitHub issue or d
 
 ---
 
-**Last Updated:** 2026-07-27  
-**Policy Version:** 1.0
+**Last Updated:** 2026-08-31  
+**Policy Version:** 1.1

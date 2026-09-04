@@ -135,6 +135,10 @@ function buildDescription(fn, args, data, contractName) {
       const [owner, spender, to, amount, token] = args;
       return `Address ${fmt(owner)} (via ${fmt(spender)}) transferred ${amount} ${token ?? ""} to ${fmt(to)} on ${contractName}`;
     }
+    case "burn_from": {
+      const [owner, spender, amount, token] = args;
+      return `${amount} ${token ?? ""} burned from ${fmt(owner)} (via ${fmt(spender)}) on ${contractName}`;
+    }
     case "approve": {
       const [from, spender] = args;
       return `Address ${fmt(from)} approved ${fmt(spender)} to spend on ${contractName}`;
@@ -253,6 +257,22 @@ function extractAddresses(values) {
 }
 
 const ADDRESS_RE = /^[GC][A-Z0-9]{55}$/;
+
+/**
+ * Evict a cached contract-meta entry so the next decoded event for that
+ * contract re-fetches fresh ABI metadata from the DB.
+ *
+ * Called by the indexer when it observes an on-chain `update` event for a
+ * contract, so that ABI cache invalidation is near-instant instead of waiting
+ * for the 60s LRU TTL to expire.
+ *
+ * @param {string} contractId - Strkey-encoded contract address (C…)
+ */
+export function evictContractMeta(contractId) {
+  if (contractId) {
+    contractMetaCache.delete(contractId);
+  }
+}
 
 export function fmt(addr) {
   if (typeof addr === "string" && ADDRESS_RE.test(addr)) {
