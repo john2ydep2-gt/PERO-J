@@ -22,6 +22,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Closes [#301](../../issues/301), [#302](../../issues/302), [#303](../../issues/303)
 
 
+- Add stake/unstake cases to buildDescription() ([#306](../../issues/306)) ([`7f5d0c3`](../../commit/7f5d0c3b80fd696d59ecb73b8f136681391a2ae8))
+
+- Add case 'stake': produces 'Address <addr> staked <amount> <token> on <contract>'
+  - Add case 'unstake': produces 'Address <addr> unstaked <amount> <token> on <contract>'
+  - Extend test constants from C13 to C17 (C14–C16 were referenced but undeclared)
+  - Fix C13 ID collision: approve test keeps C13; stake test reassigned to C17
+
+  blend-abi.json already contained stake/unstake entries — no fixture change needed.
+  ContractPage.tsx already had !metaLoading in the events query enabled condition
+  ([#305](../../issues/305)) — no frontend change needed.
+
+  Closes [#305](../../issues/305)
+  Closes [#306](../../issues/306)
+
+
 - Validate POST /api/contracts payload before upsert ([`cf7909a`](../../commit/cf7909a22aa84fc64dd6b2dced6998f9ad7e6b3e))
 
 Return a clean 400 for missing/invalid id, name, or functions instead
@@ -609,6 +624,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Documentation
+
+- Auto-update CHANGELOG.md [skip ci] ([`bc83ced`](../../commit/bc83cedd948bcc6a645f6021c5afa2997d56d642))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1bf46a8`](../../commit/1bf46a8a9f247b1f3ab5301245ba80e0df0ba2b9))
 
