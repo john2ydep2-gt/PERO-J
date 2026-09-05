@@ -268,9 +268,9 @@ describe("decode()", () => {
   // #306 — stake / unstake
   it("uses buildDescription for 'stake'", async () => {
     db.getContractMeta = async (id) =>
-      id === C13 ? { id: C13, name: "Blend", functions: [{ name: "stake" }] } : null;
+      id === C17 ? { id: C17, name: "Blend", functions: [{ name: "stake" }] } : null;
 
-    const ev = makeRawEvent(C13, "stake", [
+    const ev = makeRawEvent(C17, "stake", [
       scAddress(ADDR_G),
       xdr.ScVal.scvString("200"),
       xdr.ScVal.scvString("BLND"),
