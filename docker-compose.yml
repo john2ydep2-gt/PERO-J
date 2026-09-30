@@ -26,6 +26,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://peroj:peroj@postgres:5432/peroj}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
       RPC_URL: ${RPC_URL:-https://soroban-testnet.stellar.org}
       NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
       EXPLORER_CONTRACT_ID: ${EXPLORER_CONTRACT_ID:-}

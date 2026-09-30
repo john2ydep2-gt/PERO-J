@@ -123,9 +123,10 @@ This is equivalent to `docker compose up --build` and starts:
 
 `DATABASE_URL` is injected into the `indexer` service via the compose
 environment (defaulting to `postgres://peroj:peroj@postgres:5432/peroj`).
-Override it — along with `RPC_URL`, `NETWORK_PASSPHRASE`, `EXPLORER_CONTRACT_ID`,
-and `API_ADMIN_KEY` — by exporting the variables or placing them in a `.env`
-file next to `docker-compose.yml` before running `make dev-docker`.
+Override it — along with `DATABASE_POOL_SIZE`, `RPC_URL`, `NETWORK_PASSPHRASE`,
+`EXPLORER_CONTRACT_ID`, and `API_ADMIN_KEY` — by exporting the variables or
+placing them in a `.env` file next to `docker-compose.yml` before running
+`make dev-docker`.
 
 Stop the stack with `docker compose down` (add `-v` to also drop the database
 volume).

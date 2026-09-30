@@ -12,3 +12,4 @@ data:
   FRONTEND_PORT: "3000"
   INDEXER_URL: "http://indexer:3001"
   RPC_URL: "http://rpc:8545"
+  DATABASE_POOL_SIZE: "20"
