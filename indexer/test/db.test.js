@@ -83,6 +83,42 @@ import { db, getPoolSize } from "../src/db.js";
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
+describe("getPoolSize()", () => {
+  it("uses a valid configured pool size", () => {
+    assert.equal(getPoolSize("8"), 8);
+  });
+
+  it("falls back to the default and warns for an invalid value", () => {
+    const originalWarn = console.warn;
+    const warnings = [];
+    console.warn = (message) => warnings.push(message);
+    try {
+      assert.equal(getPoolSize("101"), 20);
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /Invalid DATABASE_POOL_SIZE/);
+  });
+
+  it("uses the default when the value is missing", () => {
+    const originalWarn = console.warn;
+    const originalPoolSize = process.env.DATABASE_POOL_SIZE;
+    delete process.env.DATABASE_POOL_SIZE;
+    console.warn = () => assert.fail("missing value should not warn");
+    try {
+      assert.equal(getPoolSize(), 20);
+    } finally {
+      console.warn = originalWarn;
+      if (originalPoolSize === undefined) {
+        delete process.env.DATABASE_POOL_SIZE;
+      } else {
+        process.env.DATABASE_POOL_SIZE = originalPoolSize;
+      }
+    }
+  });
+});
+
 describe("db.init() migrations", () => {
   beforeEach(() => resetMock());
 

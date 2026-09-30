@@ -25,6 +25,7 @@ All Kubernetes resources are located in the `k8s/` directory:
 | `POLL_MS` | Ingestion poll interval in ms | `5000` |
 | `PORT` | API server listen port | `3001` |
 | `LAG_ALERT_THRESHOLD_S` | Maximum allowed indexing lag before readiness degrades | `30` |
+| `DATABASE_POOL_SIZE` | Maximum PostgreSQL connections in the indexer pool (1-100) | `20` |
 | `VITE_API_PROXY` | Proxy target for frontend API requests | `http://indexer:3001` |
 
 ### Secrets (`k8s/secret.yaml`)
