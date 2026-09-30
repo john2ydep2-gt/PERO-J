@@ -55,14 +55,14 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 10_000);
 
   try {
-    const res = await fetch(BASE + path, { signal: controller.signal });
+    const res = await fetch(BASE + path, { ...init, signal: controller.signal });
     if (!res.ok) throw new ApiError(res.status, path);
-    return res.json();
+    return await res.json();
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("Request timed out");
@@ -73,14 +73,16 @@ async function get<T>(path: string): Promise<T> {
   }
 }
 
+async function get<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(BASE + path, {
+  return request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new ApiError(res.status, path);
-  return res.json();
 }
 
 /**
