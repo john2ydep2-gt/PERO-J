@@ -254,9 +254,8 @@ export function createApp() {
 
     eventEmitter.on("event", onEvent);
 
-    req.on("close", () => {
+    res.on("close", () => {
       eventEmitter.off("event", onEvent);
-      res.end();
     });
   });
 
@@ -385,6 +384,15 @@ export function createApp() {
       }
 
       await db.upsertContractMeta({ ...req.body, registered_by: registeredBy });
-      res.status(201).json({ ok: true }
+      res.status(201).json({ ok: true });
+    })
+  );
 
-/* … truncated 3341 chars — edit only what you need near the top … */
+  return app;
+}
+
+export function startApi() {
+  return createApp().listen(PORT, () => {
+    console.log(`[api] listening on ${PORT}`);
+  });
+}
