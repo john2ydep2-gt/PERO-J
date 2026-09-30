@@ -33,6 +33,7 @@ function makeRawEvent(contractId, fnSymbol, extraTopics = [], dataVal = xdr.ScVa
 // Deterministic test addresses (seed = 32 bytes of 0x01 / 0x02)
 const ADDR_G  = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
 const ADDR_G2 = "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U";
+const ADDR_G3 = StrKey.encodeEd25519PublicKey(Buffer.alloc(32, 3));
 
 function scAddress(gAddr) {
   return xdr.ScVal.scvAddress(
@@ -360,18 +361,17 @@ describe("decode()", () => {
     const ev = makeRawEvent(C20, "transfer_from", [
       scAddress(ADDR_G),
       scAddress(ADDR_G2),
-      scAddress(ADDR_G),
+      scAddress(ADDR_G3),
       xdr.ScVal.scvString("50"),
       xdr.ScVal.scvString("TOKEN"),
     ]);
 
     const result = await decode(ev);
     assert.equal(result.function, "transfer_from");
-    assert.ok(result.description.includes("transferred"), "description should say 'transferred'");
-    assert.ok(result.description.includes("via"), "description should name the spender");
-    assert.ok(result.description.includes("50"), "description should include amount");
-    assert.ok(result.description.includes("TOKEN"), "description should include token");
-    assert.ok(result.description.includes("DexRouter"), "description should include contract name");
+    assert.equal(
+      result.description,
+      `Address ${fmt(ADDR_G)} (via ${fmt(ADDR_G2)}) transferred 50 TOKEN to ${fmt(ADDR_G3)} on DexRouter`
+    );
   });
 
   it("uses buildDescription for 'burn_from'", async () => {
@@ -387,11 +387,10 @@ describe("decode()", () => {
 
     const result = await decode(ev);
     assert.equal(result.function, "burn_from");
-    assert.ok(result.description.includes("burned"), "description should say 'burned'");
-    assert.ok(result.description.includes("via"), "description should name the spender");
-    assert.ok(result.description.includes("25"), "description should include amount");
-    assert.ok(result.description.includes("TOKEN"), "description should include token");
-    assert.ok(result.description.includes("LendCo"), "description should include contract name");
+    assert.equal(
+      result.description,
+      `25 TOKEN burned from ${fmt(ADDR_G)} (via ${fmt(ADDR_G2)}) on LendCo`
+    );
   });
 
   it("evictContractMeta forces a fresh metadata fetch on the next decode", async () => {
