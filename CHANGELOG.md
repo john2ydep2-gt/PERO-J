@@ -960,6 +960,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`df45aa3`](../../commit/df45aa3ccd5217cd703bbc30fb6148424a37feea))
+
 - Auto-update CHANGELOG.md [skip ci] ([`dbc88a1`](../../commit/dbc88a16b9a22db110cef890e8ff377aa262f53c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`861b291`](../../commit/861b29193901a0dd8da9ef533e52d9dc133c241d))
@@ -1284,6 +1286,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
 
 - Add SEP-41 token metadata endpoint ([#816](../../issues/816)) ([`77ee7d8`](../../commit/77ee7d8bd455a71a0235b348d35bef8f197496fb))
 
