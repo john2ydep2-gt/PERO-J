@@ -1,4 +1,5 @@
 import pg from "pg";
+import { createHash } from "node:crypto";
 import { eventEmitter } from "./events.js";
 
 /** @typedef {import('./types.js').DecodedEvent} DecodedEvent */
@@ -124,6 +125,37 @@ const migrations = [
     name: "ensure_events_sac_asset_column",
     sql: `
       ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT;
+    `,
+  },
+  {
+    id: 7,
+    name: "create_resolution_audit_logs",
+    sql: `
+      CREATE TABLE IF NOT EXISTS resolution_audit_logs (
+        id                  BIGSERIAL PRIMARY KEY,
+        submission_id       TEXT NOT NULL UNIQUE,
+        response_payload    TEXT NOT NULL,
+        response_status     INTEGER NOT NULL CHECK (response_status BETWEEN 100 AND 599),
+        response_headers    JSONB NOT NULL,
+        resolved_at         TIMESTAMPTZ NOT NULL,
+        evidence_hash       CHAR(64) NOT NULL,
+        recorded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE OR REPLACE FUNCTION prevent_resolution_audit_log_mutation()
+      RETURNS TRIGGER LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'resolution audit records are immutable';
+      END;
+      $$;
+
+      CREATE TRIGGER resolution_audit_logs_prevent_row_mutation
+        BEFORE UPDATE OR DELETE ON resolution_audit_logs
+        FOR EACH ROW EXECUTE FUNCTION prevent_resolution_audit_log_mutation();
+
+      CREATE TRIGGER resolution_audit_logs_prevent_truncate
+        BEFORE TRUNCATE ON resolution_audit_logs
+        FOR EACH STATEMENT EXECUTE FUNCTION prevent_resolution_audit_log_mutation();
     `,
   },
 ];
@@ -309,6 +341,75 @@ export const db = {
    */
   async getEvent(seq) {
     const { rows } = await pool.query("SELECT * FROM events WHERE seq = $1", [seq]);
+    return rows[0] ?? null;
+  },
+
+  /**
+   * Persist one immutable evidence bundle for a resolved Oracle submission.
+   *
+   * @param {{submission_id: string, response_payload: string, response_status: number, response_headers: Record<string, string>, resolved_at: string}} evidence
+   * @returns {Promise<object>}
+   */
+  async createResolutionAuditLog(evidence) {
+    const sortedHeaderEntries = Object.entries(evidence.response_headers).sort(
+      ([left], [right]) => (left < right ? -1 : left > right ? 1 : 0),
+    );
+    const canonicalHeaders = Object.fromEntries(sortedHeaderEntries);
+    const bundle = {
+      submission_id: evidence.submission_id,
+      response_payload: evidence.response_payload,
+      response_status: evidence.response_status,
+      response_headers: sortedHeaderEntries,
+      resolved_at: new Date(evidence.resolved_at).toISOString(),
+    };
+    const evidenceHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    const { rows } = await pool.query(
+      `INSERT INTO resolution_audit_logs
+         (submission_id, response_payload, response_status, response_headers, resolved_at, evidence_hash)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (submission_id) DO NOTHING
+       RETURNING id, submission_id, response_payload, response_status, response_headers,
+                 resolved_at, evidence_hash, recorded_at`,
+      [
+        bundle.submission_id,
+        bundle.response_payload,
+        bundle.response_status,
+        JSON.stringify(canonicalHeaders),
+        bundle.resolved_at,
+        evidenceHash,
+      ],
+    );
+    if (rows[0]) {
+      return rows[0];
+    }
+
+    const existing = await this.getResolutionAuditLog(bundle.submission_id);
+    if (existing?.evidence_hash?.trim() === evidenceHash) {
+      return existing;
+    }
+    const error = new Error(
+      `Conflicting resolution evidence already exists for submission ${bundle.submission_id}`,
+    );
+    error.code = "RESOLUTION_AUDIT_CONFLICT";
+    throw error;
+  },
+
+  /**
+   * Fetch the immutable evidence record for an Oracle submission.
+   *
+   * @param {string} submissionId
+   * @returns {Promise<object|null>}
+   */
+  async getResolutionAuditLog(submissionId) {
+    const { rows } = await pool.query(
+      `SELECT id, submission_id, response_payload, response_status, response_headers,
+              resolved_at, evidence_hash, recorded_at
+       FROM resolution_audit_logs
+       WHERE submission_id = $1`,
+      [submissionId],
+    );
     return rows[0] ?? null;
   },
 
@@ -553,4 +654,3 @@ export const db = {
     );
   },
 };
-
