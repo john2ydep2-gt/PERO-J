@@ -5,6 +5,9 @@ import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
+import { marketCacheManager, BET_PLACED_CHANNEL } from "./cache-manager.js";
+import { bondEscrowWorker } from "./bond-escrow-worker.js";
+import { publish } from "./redis.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -83,6 +86,7 @@ export function validateContractPayload(body) {
 }
 
 export function createApp() {
+  marketCacheManager.start();
   const app = express();
   let distinctFunctionsCache = null;
   app.use(express.json());
@@ -227,6 +231,119 @@ export function createApp() {
       const page = Number(req.query.page) || 1;
       const result = await db.getMarkets({ limit, cursor, page });
       res.json(result);
+    })
+  );
+
+  // GET /api/v1/markets/:id — market details with Redis caching (issue #968)
+  v1Router.get(
+    "/markets/:id",
+    asyncHandler(async (req, res) => {
+      const market = await marketCacheManager.getMarket(req.params.id, () =>
+        db.getMarket(req.params.id)
+      );
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+      res.json(market);
+    })
+  );
+
+  // GET /api/v1/markets/:id/odds — fresh odds with immediate Redis cache invalidation support (issue #968)
+  v1Router.get(
+    "/markets/:id/odds",
+    asyncHandler(async (req, res) => {
+      const odds = await marketCacheManager.getMarketOdds(req.params.id, () =>
+        db.getMarketOdds(req.params.id)
+      );
+      if (!odds) {
+        return res.status(404).json({ error: "Odds not found for market" });
+      }
+      res.json({ market_id: req.params.id, odds });
+    })
+  );
+
+  // POST /api/v1/events/bet-placed — process BetPlaced event with <100ms cache invalidation & pre-warming (issue #968)
+  v1Router.post(
+    "/events/bet-placed",
+    asyncHandler(async (req, res) => {
+      const result = await marketCacheManager.handleBetPlacedEvent(req.body);
+      await publish(BET_PLACED_CHANNEL, req.body);
+      res.status(200).json(result);
+    })
+  );
+
+  // GET /api/v1/oracle/circuit-breaker — circuit breaker and automated resolution status (issue #958)
+  v1Router.get(
+    "/oracle/circuit-breaker",
+    asyncHandler(async (req, res) => {
+      res.json(bondEscrowWorker.getCircuitBreakerStatus());
+    })
+  );
+
+  // POST /api/v1/oracle/audit-bonds — run bond escrow invariant verification worker (issue #958)
+  v1Router.post(
+    "/oracle/audit-bonds",
+    asyncHandler(async (req, res) => {
+      const balance =
+        req.body?.contract_balance !== undefined ? req.body.contract_balance : null;
+      const report = await bondEscrowWorker.verifyEscrowInvariant({
+        contractBalance: balance,
+      });
+      const status = report.valid ? 200 : 409;
+      res.status(status).json(report);
+    })
+  );
+
+  // GET /api/v1/disputes/bonds — list dispute bonds and aggregate escrow accounting (issue #958)
+  v1Router.get(
+    "/disputes/bonds",
+    asyncHandler(async (req, res) => {
+      const { dispute_id, status } = req.query;
+      const bonds = await db.getDisputeBonds({ dispute_id, status });
+      const accounting = await db.getBondAccounting();
+      res.json({ bonds, accounting });
+    })
+  );
+
+  // POST /api/v1/disputes/bonds — record deposited dispute bond (issue #958)
+  v1Router.post(
+    "/disputes/bonds",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const { id, dispute_id, market_id, bond_type, depositor, amount } = req.body;
+      if (!id || !dispute_id || !bond_type || !depositor || !amount) {
+        return res.status(400).json({ error: "Missing required dispute bond fields" });
+      }
+      const bond = await db.recordDisputeBond({
+        id,
+        dispute_id,
+        market_id,
+        bond_type,
+        depositor,
+        amount,
+      });
+      res.status(201).json(bond);
+    })
+  );
+
+  // POST /api/v1/disputes/bonds/:id/settle — settle dispute bond (issue #958)
+  v1Router.post(
+    "/disputes/bonds/:id/settle",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const { status = "settled", settled_amount } = req.body;
+      if (settled_amount === undefined) {
+        return res.status(400).json({ error: "settled_amount is required" });
+      }
+      const settled = await db.settleDisputeBond({
+        id: req.params.id,
+        status,
+        settled_amount,
+      });
+      if (!settled) {
+        return res.status(404).json({ error: "Dispute bond not found" });
+      }
+      res.json(settled);
     })
   );
 

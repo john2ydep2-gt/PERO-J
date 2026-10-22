@@ -190,6 +190,26 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at, id);
     `,
   },
+  {
+    id: 8,
+    name: "create_dispute_bonds_table",
+    sql: `
+      CREATE TABLE IF NOT EXISTS dispute_bonds (
+        id             TEXT PRIMARY KEY,
+        dispute_id     TEXT NOT NULL,
+        market_id      TEXT,
+        bond_type      TEXT NOT NULL,
+        depositor      TEXT NOT NULL,
+        amount         NUMERIC NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'deposited',
+        settled_amount NUMERIC DEFAULT 0,
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        settled_at     TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_dispute ON dispute_bonds(dispute_id);
+      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_status ON dispute_bonds(status);
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -805,5 +825,175 @@ export const db = {
       [String(ledger)]
     );
   },
+
+  /**
+   * Get a market by ID.
+   *
+   * @param {string} id
+   * @returns {Promise<any|null>}
+   */
+  async getMarket(id) {
+    if (!id) return null;
+    try {
+      const { rows } = await pool.query("SELECT * FROM markets WHERE id = $1", [id]);
+      return rows[0] || null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Calculate or retrieve odds for a given market ID based on placed bets.
+   *
+   * @param {string} marketId
+   * @returns {Promise<Record<string, number>|null>}
+   */
+  async getMarketOdds(marketId) {
+    if (!marketId) return null;
+    try {
+      const { rows } = await pool.query(
+        "SELECT outcome, SUM(amount) AS pool FROM bets WHERE market_id = $1 GROUP BY outcome",
+        [marketId]
+      );
+      if (!rows.length) return null;
+      let total = 0;
+      const outcomePools = {};
+      for (const row of rows) {
+        const poolVal = parseFloat(row.pool) || 0;
+        outcomePools[row.outcome] = poolVal;
+        total += poolVal;
+      }
+      const odds = {};
+      for (const [outcome, poolVal] of Object.entries(outcomePools)) {
+        odds[outcome] = poolVal > 0 ? parseFloat((total / poolVal).toFixed(4)) : 1.0;
+      }
+      return odds;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Record a deposited dispute bond (submitter or challenger).
+   *
+   * @param {object} bond
+   * @param {string} bond.id
+   * @param {string} bond.dispute_id
+   * @param {string} [bond.market_id]
+   * @param {string} bond.bond_type - 'submitter' or 'challenger'
+   * @param {string} bond.depositor
+   * @param {number|string} bond.amount
+   * @param {string} [bond.status='deposited']
+   * @returns {Promise<any>}
+   */
+  async recordDisputeBond({
+    id,
+    dispute_id,
+    market_id = null,
+    bond_type,
+    depositor,
+    amount,
+    status = "deposited",
+  }) {
+    const { rows } = await pool.query(
+      `INSERT INTO dispute_bonds (id, dispute_id, market_id, bond_type, depositor, amount, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [id, dispute_id, market_id, bond_type, depositor, amount, status]
+    );
+    return rows[0];
+  },
+
+  /**
+   * Settle a dispute bond (returned or slashed).
+   *
+   * @param {object} params
+   * @param {string} params.id
+   * @param {string} [params.status='settled'] - 'returned', 'slashed', or 'settled'
+   * @param {number|string} params.settled_amount
+   * @returns {Promise<any>}
+   */
+  async settleDisputeBond({ id, status = "settled", settled_amount }) {
+    const { rows } = await pool.query(
+      `UPDATE dispute_bonds
+       SET status = $2, settled_amount = $3, settled_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, status, settled_amount]
+    );
+    return rows[0] || null;
+  },
+
+  /**
+   * Get dispute bonds with optional filters.
+   *
+   * @param {object} [filters]
+   * @param {string} [filters.dispute_id]
+   * @param {string} [filters.status]
+   * @returns {Promise<any[]>}
+   */
+  async getDisputeBonds({ dispute_id = null, status = null } = {}) {
+    const conditions = [];
+    const params = [];
+    if (dispute_id) {
+      params.push(dispute_id);
+      conditions.push(`dispute_id = $${params.length}`);
+    }
+    if (status) {
+      params.push(status);
+      conditions.push(`status = $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM dispute_bonds ${where} ORDER BY created_at DESC`,
+        params
+      );
+      return rows;
+    } catch {
+      return [];
+    }
+  },
+
+  /**
+   * Retrieve aggregate bond accounting across disputes:
+   * - total_bonds_deposited: sum of all deposited amounts
+   * - total_bonds_settled: sum of all settled amounts
+   * - expected_escrow_holdings: total_bonds_deposited - total_bonds_settled
+   * - active_disputes: count of open disputes with active bonds
+   *
+   * @returns {Promise<{ total_bonds_deposited: number, total_bonds_settled: number, expected_escrow_holdings: number, active_disputes: number }>}
+   */
+  async getBondAccounting() {
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          COALESCE(SUM(amount), 0) AS total_deposited,
+          COALESCE(SUM(settled_amount), 0) AS total_settled,
+          COUNT(DISTINCT CASE WHEN status = 'deposited' THEN dispute_id END) AS active_disputes
+        FROM dispute_bonds
+      `);
+      const row = rows[0] || {};
+      const totalDeposited = parseFloat(row.total_deposited) || 0;
+      const totalSettled = parseFloat(row.total_settled) || 0;
+      const expectedHoldings = totalDeposited - totalSettled;
+      const activeDisputes = parseInt(row.active_disputes, 10) || 0;
+
+      return {
+        total_bonds_deposited: totalDeposited,
+        total_bonds_settled: totalSettled,
+        expected_escrow_holdings: expectedHoldings,
+        active_disputes: activeDisputes,
+      };
+    } catch (err) {
+      return {
+        total_bonds_deposited: 0,
+        total_bonds_settled: 0,
+        expected_escrow_holdings: 0,
+        active_disputes: 0,
+      };
+    }
+  },
 };
+
 
