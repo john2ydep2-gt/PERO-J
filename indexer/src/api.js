@@ -5,6 +5,7 @@ import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
+import { register } from "./metrics.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -86,6 +87,15 @@ export function createApp() {
   const app = express();
   let distinctFunctionsCache = null;
   app.use(express.json());
+
+  // GET /metrics — Prometheus exposition format
+  app.get(
+    "/metrics",
+    asyncHandler(async (_req, res) => {
+      res.set("Content-Type", register.contentType);
+      res.send(await register.metrics());
+    })
+  );
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
   app.get(

@@ -38,6 +38,8 @@ const pool = new pg.Pool({
 });
 const MIGRATION_LOCK_ID = 57_056;
 const MAX_PAGE = 200;
+// 10 bound params per row; keeps each statement far below Postgres' 65535 limit.
+const UPSERT_CHUNK_SIZE = 500;
 
 function escapeLikePattern(value) {
   return String(value ?? "")
@@ -124,6 +126,17 @@ const migrations = [
     name: "ensure_events_sac_asset_column",
     sql: `
       ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT;
+    `,
+  },
+  {
+    id: 7,
+    name: "create_indexed_ledgers",
+    sql: `
+      CREATE TABLE IF NOT EXISTS indexed_ledgers (
+        ledger     BIGINT PRIMARY KEY,
+        hash       TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `,
   },
 ];
@@ -242,6 +255,61 @@ export const db = {
       ]
     );
     eventEmitter.emit("event", ev);
+  },
+
+  /**
+   * Persist many decoded events in one transaction using multi-row INSERTs.
+   * Any failure rolls back the whole batch so a ledger is never half-written.
+   * Events are emitted only after the commit succeeds.
+   * Uses a dedicated client for the transaction — safe to call outside of init().
+   *
+   * @param {DecodedEvent[]} events
+   * @returns {Promise<void>}
+   */
+  async upsertEvents(events) {
+    if (!events.length) {
+      return;
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (let i = 0; i < events.length; i += UPSERT_CHUNK_SIZE) {
+        const chunk = events.slice(i, i + UPSERT_CHUNK_SIZE);
+        const params = [];
+        const rows = chunk.map((ev) => {
+          const base = params.length;
+          params.push(
+            ev.contract_id,
+            ev.function,
+            ev.ledger,
+            ev.tx_hash,
+            ev.description,
+            JSON.stringify(ev.raw_topics),
+            ev.raw_data,
+            ev.sac_asset ?? null,
+            ev.event_addresses ?? [],
+            ev.onchain_seq ?? null
+          );
+          const ph = Array.from({ length: 10 }, (_, j) => `$${base + j + 1}`);
+          return `(${ph.join(",")})`;
+        });
+        await client.query(
+          `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+           VALUES ${rows.join(",")}
+           ON CONFLICT DO NOTHING`,
+          params
+        );
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+    for (const ev of events) {
+      eventEmitter.emit("event", ev);
+    }
   },
 
   /**
@@ -551,6 +619,66 @@ export const db = {
        ON CONFLICT (key) DO UPDATE SET value = $1`,
       [String(ledger)]
     );
+  },
+  /**
+   * Record the hash of an indexed ledger and prune entries outside the
+   * retained sliding window.
+   *
+   * @param {number} ledger
+   * @param {string} hash
+   * @param {number} [keep=32] - Number of most recent ledgers to retain.
+   * @returns {Promise<void>}
+   */
+  async recordLedger(ledger, hash, keep = 32) {
+    await pool.query(
+      `INSERT INTO indexed_ledgers (ledger, hash)
+       VALUES ($1, $2)
+       ON CONFLICT (ledger) DO UPDATE SET hash = $2`,
+      [ledger, hash]
+    );
+    await pool.query("DELETE FROM indexed_ledgers WHERE ledger <= $1", [ledger - keep]);
+  },
+
+  /**
+   * Return the most recent stored ledger hashes, ordered oldest first.
+   *
+   * @param {number} [limit=32]
+   * @returns {Promise<Array<{ ledger: number, hash: string }>>}
+   */
+  async getIndexedLedgers(limit = 32) {
+    const { rows } = await pool.query(
+      "SELECT ledger, hash FROM (SELECT ledger, hash FROM indexed_ledgers ORDER BY ledger DESC LIMIT $1) t ORDER BY ledger ASC",
+      [limit]
+    );
+    return rows.map((r) => ({ ledger: Number(r.ledger), hash: r.hash }));
+  },
+
+  /**
+   * Atomically remove events and ledger hashes at or after the fork point and
+   * rewind the cursor so those ledgers are re-indexed. Earlier history is untouched.
+   *
+   * @param {number} forkLedger - First ledger that diverged.
+   * @returns {Promise<void>}
+   */
+  async rollbackToLedger(forkLedger) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM events WHERE ledger >= $1", [forkLedger]);
+      await client.query("DELETE FROM indexed_ledgers WHERE ledger >= $1", [forkLedger]);
+      await client.query(
+        `INSERT INTO indexer_state (key, value)
+         VALUES ('last_ledger', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [String(forkLedger - 1)]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 };
 

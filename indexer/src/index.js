@@ -8,6 +8,8 @@ import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
 import { submitEvent } from "./contract.js";
 import { resolvePollMs } from "./resolvePollMs.js";
+import { eventsProcessed, errors, recordProgress } from "./metrics.js";
+import { REORG_WINDOW, detectReorg, fetchLedgerHashes } from "./reorg.js";
 
 dotenv.config();
 
@@ -95,6 +97,7 @@ export async function indexLedger(ledger, rpcClient = rpc) {
     limit: 200,
   });
 
+  const batch = [];
   for (const ev of res.events) {
     // On-chain `update` events from the explorer contract let us invalidate
     // the in-memory ABI cache immediately, instead of waiting for the 60s LRU
@@ -113,13 +116,23 @@ export async function indexLedger(ledger, rpcClient = rpc) {
     if (onchain_seq !== null) {
       decoded.onchain_seq = onchain_seq;
     }
-    await db.upsertEvent(decoded);
-    console.log(`[${ev.ledger}] ${decoded.function}: ${decoded.description}`);
+    batch.push(decoded);
   }
+
+  // Commit the whole ledger batch atomically in a single transaction.
+  await db.upsertEvents(batch);
+  for (const decoded of batch) {
+    console.log(`[${decoded.ledger}] ${decoded.function}: ${decoded.description}`);
+  }
+  eventsProcessed.inc(batch.length);
 
   // Record the time we finished processing this ledger batch
   health.lastIndexedAt = Date.now();
   health.lastLedger = res.latestLedger;
+  // When the page was full, events past the last one returned are still
+  // pending, so the lag reflects how far behind the head we are.
+  const processedTo = batch.length ? Math.max(...batch.map((e) => e.ledger)) : res.latestLedger;
+  recordProgress(processedTo, res.latestLedger);
 
   return res.latestLedger;
 }
@@ -238,12 +251,26 @@ async function run() {
 
   while (!shuttingDown) {
     try {
+      const forkLedger = await detectReorg((start, limit) =>
+        fetchLedgerHashes(RPC_URL, start, limit)
+      );
+      if (forkLedger !== null) {
+        console.warn(`[reorg] ledger hash mismatch at ${forkLedger} — rolling back and re-indexing`);
+        await db.rollbackToLedger(forkLedger);
+        cursor = forkLedger;
+      }
+
       const latest = await indexLedger(cursor);
+      const hashes = await fetchLedgerHashes(RPC_URL, latest, 1);
+      if (hashes.has(latest)) {
+        await db.recordLedger(latest, hashes.get(latest), REORG_WINDOW);
+      }
       cursor = latest + 1;
       await db.setCursor(latest);
       consecutiveErrors = 0;
     } catch (err) {
       consecutiveErrors++;
+      errors.inc();
       console.error("Indexer error:", err.message);
       if (consecutiveErrors >= RPC_ERROR_THRESHOLD) {
         console.warn(`${consecutiveErrors} consecutive RPC errors — recreating RPC client`);
