@@ -154,9 +154,21 @@ export function createApp() {
     })
   );
 
-  // GET /api/functions — distinct function names across all events
-  app.get(
-    "/api/functions",
+  // Legacy route redirect middleware: redirects /api/* (except /api/v1/*) to /api/v1/* with HTTP 301 (issue #965)
+  app.use((req, res, next) => {
+    const url = req.originalUrl || req.url;
+    if (url.startsWith("/api") && !url.startsWith("/api/v1/") && url !== "/api/v1") {
+      const target = url.replace(/^\/api(?=\/|\?|$)/, "/api/v1");
+      return res.redirect(301, target);
+    }
+    next();
+  });
+
+  const v1Router = express.Router();
+
+  // GET /api/v1/functions — distinct function names across all events
+  v1Router.get(
+    "/functions",
     asyncHandler(async (req, res) => {
       const now = Date.now();
       const cacheIsFresh =
@@ -177,9 +189,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/tokens/:id/metadata — SEP-41 token metadata from simulated calls
-  app.get(
-    "/api/tokens/:id/metadata",
+  // GET /api/v1/tokens/:id/metadata — SEP-41 token metadata from simulated calls
+  v1Router.get(
+    "/tokens/:id/metadata",
     asyncHandler(async (req, res) => {
       let metadata;
       try {
@@ -193,55 +205,62 @@ export function createApp() {
     })
   );
 
-  // GET /api/leaderboard?limit=10 — top contracts by event volume
-  app.get(
-    "/api/leaderboard",
+  // GET /api/v1/leaderboard?limit=10&cursor= — top contracts by event volume (issue #966)
+  v1Router.get(
+    "/leaderboard",
     asyncHandler(async (req, res) => {
       const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
-      const result = await db.getLeaderboard(limit);
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const result = await db.getLeaderboard({ limit, cursor, page });
       res.setHeader("Cache-Control", "public, max-age=60");
       res.json(result);
     })
   );
 
-  // GET /api/events?contract=&fn=&page=&q=
-  app.get(
-    "/api/events",
+  // GET /api/v1/markets?limit=&cursor=&page= — prediction markets cursor pagination (issue #966)
+  v1Router.get(
+    "/markets",
+    asyncHandler(async (req, res) => {
+      const limit = Number(req.query.limit) || 20;
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const result = await db.getMarkets({ limit, cursor, page });
+      res.json(result);
+    })
+  );
+
+  // GET /api/v1/bets?market_id=&limit=&cursor=&page= — bets cursor pagination (issue #966)
+  v1Router.get(
+    "/bets",
+    asyncHandler(async (req, res) => {
+      const limit = Number(req.query.limit) || 20;
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const market_id = req.query.market_id || null;
+      const result = await db.getBets({ market_id, limit, cursor, page });
+      res.json(result);
+    })
+  );
+
+  // GET /api/v1/events?contract=&fn=&page=&limit=&cursor=&q= — events cursor pagination (issue #966)
+  v1Router.get(
+    "/events",
     asyncHandler(async (req, res) => {
       const result = await db.getEvents({
         contract: req.query.contract,
         fn: req.query.fn,
         q: req.query.q,
         page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 25,
+        cursor: req.query.cursor || null,
       });
       res.json(result);
     })
   );
 
-  // GET /api/events/:seq/raw
-  app.get(
-    "/api/events/:seq/raw",
-    asyncHandler(async (req, res) => {
-      const seqStr = String(req.params.seq).trim();
-      const seq = parseInt(seqStr, 10);
-      if (isNaN(seq) || seq < 0 || !/^\d+$/.test(seqStr)) {
-        return res.status(400).json({ error: "seq must be a non-negative integer" });
-      }
-      const ev = await db.getEvent(seq);
-      if (!ev) {
-        return res.status(404).json({ error: "Not found" });
-      }
-      res.json({
-        seq: ev.seq,
-        raw_topics: ev.raw_topics,
-        raw_data: ev.raw_data,
-        tx_hash: ev.tx_hash,
-      });
-    })
-  );
-
-  // GET /api/events/stream — Server-Sent Events endpoint for live event feed
-  app.get("/api/events/stream", (req, res) => {
+  // GET /api/v1/events/stream — Server-Sent Events endpoint for live event feed
+  v1Router.get("/events/stream", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -259,11 +278,9 @@ export function createApp() {
     });
   });
 
-  // GET /api/events/:seq/raw — raw un-decoded topics and data for a single event.
-  // Must be registered BEFORE /api/events/:seq so Express doesn't consume "raw"
-  // as the :seq parameter.
-  app.get(
-    "/api/events/:seq/raw",
+  // GET /api/v1/events/:seq/raw — raw un-decoded topics and data for a single event
+  v1Router.get(
+    "/events/:seq/raw",
     asyncHandler(async (req, res) => {
       const seqStr = String(req.params.seq).trim();
       const seq = parseInt(seqStr, 10);
@@ -283,9 +300,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/events/:seq
-  app.get(
-    "/api/events/:seq",
+  // GET /api/v1/events/:seq — single event by sequence number
+  v1Router.get(
+    "/events/:seq",
     asyncHandler(async (req, res) => {
       const seqStr = String(req.params.seq).trim();
       const seq = parseInt(seqStr, 10);
@@ -300,32 +317,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/events/:seq/raw — return only the raw event payload fields.
-  app.get(
-    "/api/events/:seq/raw",
-    asyncHandler(async (req, res) => {
-      const seqStr = String(req.params.seq).trim();
-      const seq = parseInt(seqStr, 10);
-      if (isNaN(seq) || seq < 0 || !/^\d+$/.test(seqStr)) {
-        return res.status(400).json({ error: "seq must be a non-negative integer" });
-      }
-      const ev = await db.getEvent(seq);
-      if (!ev) {
-        return res.status(404).json({ error: "Not found" });
-      }
-      res.json({
-        seq: ev.seq,
-        raw_topics: ev.raw_topics,
-        raw_data: ev.raw_data,
-        tx_hash: ev.tx_hash,
-      });
-    })
-  );
-
-  // GET /api/contracts?q=&page=&limit= — paginated list of registered contracts,
-  // optionally filtered by name/description via case-insensitive search.
-  app.get(
-    "/api/contracts",
+  // GET /api/v1/contracts?q=&page=&limit= — paginated list of registered contracts
+  v1Router.get(
+    "/contracts",
     asyncHandler(async (req, res) => {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 25;
@@ -334,10 +328,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/contracts/:id/events?fn=&page= — paginated event history for a
-  // registered contract, optionally filtered by function name.
-  app.get(
-    "/api/contracts/:id/events",
+  // GET /api/v1/contracts/:id/events?fn=&page= — paginated event history for contract
+  v1Router.get(
+    "/contracts/:id/events",
     asyncHandler(async (req, res) => {
       const meta = await db.getContractMeta(req.params.id);
       if (!meta) {
@@ -352,9 +345,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/contracts/:id
-  app.get(
-    "/api/contracts/:id",
+  // GET /api/v1/contracts/:id
+  v1Router.get(
+    "/contracts/:id",
     asyncHandler(async (req, res) => {
       const meta = await db.getContractMeta(req.params.id);
       if (!meta) {
@@ -364,9 +357,9 @@ export function createApp() {
     })
   );
 
-  // POST /api/contracts — register contract ABI metadata
-  app.post(
-    "/api/contracts",
+  // POST /api/v1/contracts — register contract ABI metadata
+  v1Router.post(
+    "/contracts",
     requireAdminKey,
     asyncHandler(async (req, res) => {
       const validationError = validateContractPayload(req.body);
@@ -387,6 +380,26 @@ export function createApp() {
       res.status(201).json({ ok: true });
     })
   );
+
+  // GET /api/v1/wallet/:address — wallet events
+  v1Router.get(
+    "/wallet/:address",
+    asyncHandler(async (req, res) => {
+      const { address } = req.params;
+      if (!isValidStellarAddress(address)) {
+        return res.status(400).json({ error: "Invalid Stellar address" });
+      }
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 25;
+      const result = await db.getWalletEvents(address, { page, limit });
+      res.json(result);
+    })
+  );
+
+  // Mount unified v1 router under /api/v1
+  app.use("/api/v1", v1Router);
+
+  app.use(errorHandler);
 
   return app;
 }
