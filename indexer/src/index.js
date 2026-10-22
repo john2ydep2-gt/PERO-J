@@ -16,6 +16,7 @@ dotenv.config();
 const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
 const POLL_MS = resolvePollMs();
+const LEADERBOARD_REFRESH_MS = 60_000;
 const RPC_ERROR_THRESHOLD = 3;
 const EXPLORER_CONTRACT_ID = process.env.SOROBAN_EXPLORER_CONTRACT_ID;
 
@@ -226,6 +227,14 @@ async function run() {
 
   startApi();
 
+  const refreshLeaderboard = () =>
+    db.refreshLeaderboard().catch((err) => {
+      console.error("[leaderboard] refresh failed:", err.message);
+    });
+  refreshLeaderboard();
+  const leaderboardTimer = setInterval(refreshLeaderboard, LEADERBOARD_REFRESH_MS);
+  leaderboardTimer.unref();
+
   await validateNetwork(rpc);
 
   const persisted = await db.getCursor();
@@ -254,6 +263,7 @@ async function run() {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
+  clearInterval(leaderboardTimer);
   await db.close();
   process.exit(0);
 }

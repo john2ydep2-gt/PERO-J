@@ -126,6 +126,24 @@ const migrations = [
       ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT;
     `,
   },
+  {
+    id: 7,
+    name: "add_mv_leaderboard_ranks",
+    sql: `
+      CREATE MATERIALIZED VIEW IF NOT EXISTS mv_leaderboard_ranks AS
+        SELECT e.contract_id,
+               COALESCE(c.name, e.contract_id) AS name,
+               COUNT(*) AS event_count,
+               ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, e.contract_id) AS rank
+        FROM events e
+        LEFT JOIN contracts c ON c.id = e.contract_id
+        GROUP BY e.contract_id, COALESCE(c.name, e.contract_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_leaderboard_ranks_contract
+        ON mv_leaderboard_ranks(contract_id);
+      CREATE INDEX IF NOT EXISTS idx_mv_leaderboard_ranks_rank
+        ON mv_leaderboard_ranks(rank);
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -476,8 +494,8 @@ export const db = {
   },
 
   /**
-   * Return the top N contracts by event count, joined with the contracts
-   * table to include the contract name.
+   * Return the top N contracts by event count from the pre-computed
+   * mv_leaderboard_ranks materialized view (see refreshLeaderboard()).
    * Uses pool.query — safe to call outside of init().
    *
    * @param {number} [limit=10] - Max rows to return (capped at 50).
@@ -486,15 +504,20 @@ export const db = {
   async getLeaderboard(limit = 10) {
     const capped = Math.min(Math.max(Number(limit) || 10, 1), 50);
     const { rows } = await pool.query(
-      `SELECT e.contract_id, COALESCE(c.name, e.contract_id) AS name, COUNT(*) AS event_count
-       FROM events e
-       LEFT JOIN contracts c ON c.id = e.contract_id
-       GROUP BY e.contract_id, COALESCE(c.name, e.contract_id)
-       ORDER BY event_count DESC
+      `SELECT contract_id, name, event_count
+       FROM mv_leaderboard_ranks
+       ORDER BY rank
        LIMIT $1`,
       [capped]
     );
     return rows;
+  },
+
+  /**
+   * Refresh mv_leaderboard_ranks without blocking concurrent readers.
+   */
+  async refreshLeaderboard() {
+    await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_leaderboard_ranks");
   },
 
   /**
