@@ -8,6 +8,7 @@ import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
 import { submitEvent } from "./contract.js";
 import { resolvePollMs } from "./resolvePollMs.js";
+import { validateRawEvent } from "./eventSchema.js";
 
 dotenv.config();
 
@@ -24,6 +25,14 @@ const EXPLORER_CONTRACT_ID = process.env.SOROBAN_EXPLORER_CONTRACT_ID;
  * Any two instances sharing this id will not run migrations concurrently.
  */
 const MIGRATION_LOCK_ID = 836;
+
+/**
+ * Advisory lock id for the single active writer. Only the instance holding
+ * it polls the RPC and writes; others stand by and take over on release.
+ */
+const INDEXER_LOCK_ID = 837;
+const WRITER_STANDBY_POLL_MS = 5000;
+const WRITER_HEARTBEAT_MS = 5000;
 
 let rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
@@ -107,7 +116,19 @@ export async function indexLedger(ledger, rpcClient = rpc) {
       continue;
     }
 
-    const decoded = await decode(ev);
+    const validation = validateRawEvent(ev);
+    if (!validation.ok) {
+      await sendToDeadLetter(ev, `schema validation failed: ${validation.reason}`);
+      continue;
+    }
+
+    let decoded;
+    try {
+      decoded = await decode(ev);
+    } catch (err) {
+      await sendToDeadLetter(ev, `decode failed: ${err?.message ?? String(err)}`);
+      continue;
+    }
     decoded.event_addresses = extractAddresses([decoded.topic, decoded.data]);
     const onchain_seq = await submitEvent(decoded);
     if (onchain_seq !== null) {
@@ -122,6 +143,34 @@ export async function indexLedger(ledger, rpcClient = rpc) {
   health.lastLedger = res.latestLedger;
 
   return res.latestLedger;
+}
+
+/**
+ * Route an unparseable event to the dead-letter table with the failure reason.
+ * Never throws, so a bad event cannot crash the ingestion loop.
+ *
+ * @param {object} ev - Raw event object
+ * @param {string} reason
+ */
+async function sendToDeadLetter(ev, reason) {
+  console.warn(`[dlq] ledger=${ev?.ledger} tx=${ev?.txHash}: ${reason}`);
+  try {
+    let raw;
+    try {
+      raw = JSON.stringify(ev, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+    } catch {
+      raw = String(ev);
+    }
+    await db.insertDeadLetter({
+      contract_id: typeof ev?.contractId === "string" ? ev.contractId : undefined,
+      ledger: ev?.ledger,
+      tx_hash: typeof ev?.txHash === "string" ? ev.txHash : undefined,
+      reason,
+      raw_event: raw,
+    });
+  } catch (err) {
+    console.error("[dlq] failed to persist dead-letter event:", err.message);
+  }
 }
 
 /**
@@ -226,6 +275,26 @@ async function run() {
 
   startApi();
 
+  // Single-writer: block in standby until we own the writer lock.
+  while (!shuttingDown && !(await db.tryAcquireWriterLock(INDEXER_LOCK_ID))) {
+    console.log("Another indexer holds the writer lock — standing by");
+    await new Promise((r) => setTimeout(r, WRITER_STANDBY_POLL_MS));
+  }
+  if (shuttingDown) {
+    await db.close();
+    process.exit(0);
+  }
+  console.log("Writer lock acquired — this instance is the active indexer");
+
+  let lockLost = false;
+  const heartbeat = setInterval(async () => {
+    if (!(await db.renewWriterLock())) {
+      lockLost = true;
+      console.error("Writer lock lost — shutting down to avoid concurrent writes");
+      gracefulShutdown();
+    }
+  }, WRITER_HEARTBEAT_MS);
+
   await validateNetwork(rpc);
 
   const persisted = await db.getCursor();
@@ -254,8 +323,10 @@ async function run() {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
+  clearInterval(heartbeat);
+  await db.releaseWriterLock(INDEXER_LOCK_ID);
   await db.close();
-  process.exit(0);
+  process.exit(lockLost ? 1 : 0);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

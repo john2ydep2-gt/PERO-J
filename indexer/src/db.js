@@ -37,6 +37,9 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 5000,
 });
 const MIGRATION_LOCK_ID = 57_056;
+
+/** Dedicated client holding the single-writer advisory lock, if owned. */
+let writerLockClient = null;
 const MAX_PAGE = 200;
 
 function escapeLikePattern(value) {
@@ -126,6 +129,21 @@ const migrations = [
       ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT;
     `,
   },
+  {
+    id: 7,
+    name: "create_dead_letter_events",
+    sql: `
+      CREATE TABLE IF NOT EXISTS dead_letter_events (
+        id          BIGSERIAL PRIMARY KEY,
+        contract_id TEXT,
+        ledger      BIGINT,
+        tx_hash     TEXT,
+        reason      TEXT NOT NULL,
+        raw_event   TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+    `,
+  },
 ];
 
 process.on("unhandledRejection", async (err) => {
@@ -190,6 +208,78 @@ export const db = {
       }
       client.release();
     }
+  },
+
+  /**
+   * Try to take the cluster-wide single-writer lock. Advisory locks are
+   * session-scoped, so a dedicated client is held (and heartbeated) for as
+   * long as the lock is owned; the server frees it if the connection dies.
+   *
+   * @param {number} lockId
+   * @returns {Promise<boolean>} true when this process is now the writer.
+   */
+  async tryAcquireWriterLock(lockId) {
+    const client = await pool.connect();
+    try {
+      const { rows } = await client.query("SELECT pg_try_advisory_lock($1) AS locked", [lockId]);
+      if (!rows[0].locked) {
+        client.release();
+        return false;
+      }
+    } catch (err) {
+      client.release();
+      throw err;
+    }
+    writerLockClient = client;
+    return true;
+  },
+
+  /**
+   * Heartbeat the writer-lock session.
+   * @returns {Promise<boolean>} false if the lock session is gone.
+   */
+  async renewWriterLock() {
+    if (!writerLockClient) {
+      return false;
+    }
+    try {
+      await writerLockClient.query("SELECT 1");
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Release the writer lock (if held).
+   * @param {number} lockId
+   * @returns {Promise<void>}
+   */
+  async releaseWriterLock(lockId) {
+    const client = writerLockClient;
+    writerLockClient = null;
+    if (!client) {
+      return;
+    }
+    try {
+      await client.query("SELECT pg_advisory_unlock($1)", [lockId]);
+      client.release();
+    } catch {
+      client.release(true);
+    }
+  },
+
+  /**
+   * Record an event that could not be parsed/decoded.
+   * @param {{contract_id?: string, ledger?: number, tx_hash?: string, reason: string, raw_event?: string}} entry
+   * @returns {Promise<void>}
+   */
+  async insertDeadLetter({ contract_id, ledger, tx_hash, reason, raw_event }) {
+    await pool.query(
+      `INSERT INTO dead_letter_events (contract_id, ledger, tx_hash, reason, raw_event)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [contract_id ?? null, Number.isInteger(ledger) ? ledger : null, tx_hash ?? null, reason, raw_event ?? null]
+    );
   },
 
   /**
