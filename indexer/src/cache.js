@@ -104,12 +104,44 @@ function handleIndexerEvent(ev) {
   return evictContractMeta(contractId);
 }
 
+/**
+ * Invalidate Redis cache for a specific market ID.
+ * 
+ * This is called when oracle state changes (submission, dispute, finalization)
+ * to ensure clients get fresh data within 5 seconds.
+ * 
+ * @param {string} marketId - Market identifier to invalidate
+ * @returns {Promise<void>}
+ */
+async function invalidateMarketCache(marketId) {
+  // If Redis client is available, invalidate cache entries for this market
+  // For now, this is a placeholder - actual Redis integration would go here
+  // when the project adds Redis caching for market data
+  
+  // Pattern examples that might need invalidation:
+  // - `market:${marketId}`
+  // - `market:${marketId}:oracle`
+  // - `markets:list:*` (if there's a paginated markets list)
+  
+  if (process.env.REDIS_URL) {
+    // TODO: When Redis is integrated, add actual cache invalidation here
+    // const redis = require('./redis-client');
+    // await redis.del(`market:${marketId}`);
+    // await redis.del(`market:${marketId}:oracle`);
+    console.log(`[cache] Would invalidate Redis cache for market: ${marketId}`);
+  }
+  
+  // For now, this is effectively a no-op but provides the hook for future Redis integration
+  return Promise.resolve();
+}
+
 module.exports = {
   AbiLruCache,
   abiCache,
   isExplorerUpdateEvent,
   evictContractMeta,
   handleIndexerEvent,
+  invalidateMarketCache,
   DEFAULT_TTL_MS,
   DEFAULT_MAX_ENTRIES,
 };

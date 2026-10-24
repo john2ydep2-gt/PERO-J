@@ -19,12 +19,14 @@ const _calls = []; // { sql, params }[]
 const _appliedMigrations = new Set();
 let _nextRow = null; // override row returned by the next query
 let _queryError = null; // if set, next query throws this error
+let _failQuery = null;
 
 function resetMock() {
   _calls.length = 0;
   _appliedMigrations.clear();
   _nextRow = null;
   _queryError = null;
+  _failQuery = null;
 }
 
 function lastCall() {
@@ -34,6 +36,9 @@ function lastCall() {
 // Fake client returned by pool.connect()
 const fakeClient = {
   query: async (sql, params) => {
+    if (_failQuery?.(sql)) {
+      throw new Error("injected query failure");
+    }
     if (_queryError) {
       const err = _queryError;
       _queryError = null;
@@ -128,6 +133,10 @@ describe("db.init() migrations", () => {
       call.sql.includes("ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT")
     );
     assert.ok(migrationSql, "expected a migration to add sac_asset idempotently");
+    assert.ok(
+      _calls.some((call) => call.sql.includes("CREATE TABLE IF NOT EXISTS checkpoint_state")),
+      "expected the checkpoint state migration to run"
+    );
   });
 
   it("adds sac_asset when earlier migrations are already recorded", async () => {
@@ -229,6 +238,32 @@ describe("db.upsertEvent()", () => {
     const { sql, params } = lastCall();
     assert.ok(sql.includes("sac_asset"), "expected sac_asset column in INSERT");
     assert.equal(params[7], "USDC");
+  });
+
+  it("writes ledger events and checkpoint in one transaction", async () => {
+    await db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" });
+
+    const statements = _calls.map((call) => call.sql.trim());
+    assert.equal(statements[0], "BEGIN");
+    assert.ok(statements[1].startsWith("INSERT INTO events"));
+    assert.ok(statements[2].startsWith("INSERT INTO checkpoint_state"));
+    assert.equal(statements[3], "COMMIT");
+    const checkpointCall = _calls.find((call) =>
+      call.sql.startsWith("INSERT INTO checkpoint_state")
+    );
+    assert.deepEqual(checkpointCall.params, ["soroban-indexer", 1234, "ledger-hash"]);
+  });
+
+  it("rolls back ledger events when checkpoint persistence fails", async () => {
+    _failQuery = (sql) => sql.includes("INSERT INTO checkpoint_state");
+
+    await assert.rejects(
+      db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" }),
+      /injected query failure/
+    );
+
+    assert.ok(_calls.some((call) => call.sql.trim() === "ROLLBACK"));
+    assert.ok(!_calls.some((call) => call.sql.trim() === "COMMIT"));
   });
 });
 
@@ -365,6 +400,16 @@ describe("db.getCursor() / db.setCursor()", () => {
     } finally {
       console.warn = originalWarn;
     }
+  });
+
+  it("getCheckpoint returns the persisted sequence and hash", async () => {
+    _nextRow = { last_ledger_sequence: "5000000", last_ledger_hash: "ledger-hash" };
+    const result = await db.getCheckpoint();
+    assert.deepEqual(result, {
+      last_ledger_sequence: 5000000,
+      last_ledger_hash: "ledger-hash",
+    });
+    assert.deepEqual(lastCall().params, ["soroban-indexer"]);
   });
 
   it("setCursor executes an INSERT ... ON CONFLICT query", async () => {

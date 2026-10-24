@@ -63,6 +63,16 @@ PERO-J decodes contract calls on the fly using an ABI-like metadata registry, tu
 - Node.js ≥ 20
 - PostgreSQL
 
+> **Just want to explore the running app?** You can skip everything below and
+> bring up the full stack (PostgreSQL, Redis, Soroban sandbox, indexer, and
+> frontend — pre-seeded with test markets and simulated users) with a single
+> command using Docker. See the [Docker Compose](#docker-compose-local-development)
+> section:
+> ```bash
+> docker compose up --build
+> ```
+> Then open http://localhost:5173.
+
 ### 1. Clone & configure
 ```bash
 git clone https://github.com/PERO-J
@@ -106,30 +116,83 @@ make dev
 
 ## Docker Compose (local development)
 
-Skip the manual PostgreSQL setup and `.env` wiring by running the whole stack
-(`postgres`, `indexer`, and `frontend`) with Docker Compose:
+Spin up the **entire stack** — PostgreSQL, Redis, Soroban local sandbox, indexer
+API (with hot-reload), and the frontend (with hot-reload), plus pre-seeded test
+markets and simulated user accounts — with a single command:
 
 ```bash
-make dev-docker
+docker compose up --build
 ```
 
-This is equivalent to `docker compose up --build` and starts:
+That's it. The first run builds the images and pre-applies the database
+migrations before the indexer starts; the `seed` one-shot service then
+pre-seeds three test markets (StellarSwap, Blend, Phoenix) and a dozen sample
+decoded events for four simulated wallet addresses, so the frontend has data
+to show immediately.
+
+Then open:
+
+- Frontend → http://localhost:5173
+- Indexer API → http://localhost:3001/health
+- Soroban sandbox RPC → http://localhost:8000 (for direct `soroban` CLI use)
+
+### Services
 
 | Service | Port | Notes |
 |---------|------|-------|
-| `postgres` | `5432` | Data persisted in the `postgres-data` volume |
-| `indexer` | `3001` | REST API; waits for Postgres to be healthy |
-| `frontend` | `5173` | Vite dev server, points at the indexer |
+| `postgres` | `5432` | PostgreSQL 16; data persisted in the `postgres-data` volume |
+| `redis` | `6379` | Redis 7 (AOF); provisioned for future caching/rate-limit use |
+| `soroban` | `8000` | `stellar/quickstart` local network with Soroban RPC enabled |
+| `migrate` | — | One-shot: pre-applies schema migrations before the indexer starts |
+| `indexer` | `3001` | Node.js API + poller; **hot-reload** via `node --watch` (source bind-mounted) |
+| `seed` | — | One-shot: pre-seeds test markets + simulated user accounts (idempotent) |
+| `frontend` | `5173` | Vite dev server; **hot-reload** (source bind-mounted); proxies `/api` to the indexer |
 
-`DATABASE_URL` is injected into the `indexer` service via the compose
-environment (defaulting to `postgres://peroj:peroj@postgres:5432/peroj`).
-Override it — along with `DATABASE_POOL_SIZE`, `RPC_URL`, `NETWORK_PASSPHRASE`,
-`EXPLORER_CONTRACT_ID`, and `API_ADMIN_KEY` — by exporting the variables or
-placing them in a `.env` file next to `docker-compose.yml` before running
-`make dev-docker`.
+### How it fits together
+
+- The `migrate` service runs the indexer's schema migrations (`npm run migrate`,
+  which calls `db.init()`) and exits 0 before the `indexer` starts, so the
+  schema is **pre-applied**.
+- The `indexer` waits for PostgreSQL, the Soroban sandbox, and `migrate` to be
+  ready, then polls the local sandbox (not testnet) and serves the REST API.
+- The `frontend` runs the Vite dev server with the source bind-mounted for
+  hot-reload. It proxies `/api/*` to the indexer via the `VITE_API_PROXY`
+  environment variable (default `http://indexer:3001` inside the compose
+  network), so no CORS configuration is required.
+- The `seed` service upserts the ABI fixtures and inserts sample decoded
+  events (only when the `events` table is empty, so re-running `docker
+  compose up` does not duplicate seed rows).
+
+### Configuration
+
+Defaults work out of the box. Override any value by exporting the variable or
+placing it in a `.env` file next to `docker-compose.yml` (see `.env.example`):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `peroj` | PostgreSQL credentials/database |
+| `DATABASE_URL` | `postgres://peroj:peroj@postgres:5432/peroj` | Indexer DB connection string |
+| `DATABASE_POOL_SIZE` | `5` | Indexer Postgres pool size (migrate) / `20` (indexer) |
+| `NETWORK_PASSPHRASE` | `Standalone Network ; February 2017` | Sandbox network passphrase |
+| `START_LEDGER` | `1` | Ledger to start indexing from |
+| `POLL_MS` | `5000` | Indexer poll interval (ms) |
+| `SOROBAN_EXPLORER_CONTRACT_ID` | _(empty)_ | Set to submit decoded events on-chain (optional) |
+| `SOROBAN_EXPLORER_ADMIN_SECRET` | _(empty)_ | Admin secret for on-chain `submit_event` (optional) |
+| `API_ADMIN_KEY` | _(empty)_ | Required for `POST/DELETE /api/contracts` |
+| `VITE_API_PROXY` | `http://indexer:3001` | Vite dev proxy target for `/api` |
 
 Stop the stack with `docker compose down` (add `-v` to also drop the database
-volume).
+and Redis volumes).
+
+### Resetting the seed data
+
+The seed is idempotent — it only inserts sample events when the `events` table
+is empty. To re-seed from scratch:
+
+```bash
+docker compose down -v        # wipe the postgres volume
+docker compose up --build      # migrate + seed run again
+```
 
 ---
 
@@ -170,6 +233,23 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 | `DELETE /api/contracts/:id` | Remove contract ABI metadata (requires `Authorization: Bearer <API_ADMIN_KEY>`) |
 | `GET /api/wallet/:address` | Wallet event history |
 | `GET /api/tokens/:id/volume?decimals=` | 24-hour rolling transfer volume for a SEP-41 token. Optional `decimals` query param (integer 0–38) overrides the on-chain metadata lookup. |
+| `GET /api/v1/oracle/disputes` | Active Oracle disputes with asserted outcomes, disputer addresses, council votes and tallies, deadline, and remaining voting time. Requires `ORACLE_CONTRACT_ID`; returns HTTP 503 if it is unset. |
+
+The disputes endpoint reads the Oracle contract on each request. Each dispute
+includes `affirmative_votes`, `negative_votes`, the individual `votes`, an ISO
+8601 `deadline`, and `remaining_seconds` / human-readable `remaining_time`.
+
+### Oracle council inactivity alerts
+
+When `ORACLE_CONTRACT_ID`, `ORACLE_COUNCIL_ROSTER`, and
+`PAGERDUTY_ROUTING_KEY` are configured, the indexer checks active disputes
+hourly and sends PagerDuty Events API v2 alerts when a dispute has not reached
+quorum after 24, 48, and 60 hours of its 72-hour voting period. The roster is a
+comma-separated list of council Stellar addresses. `ORACLE_COUNCIL_QUORUM` can
+set the required number of votes; when omitted, a strict majority of the
+configured roster is used. The PagerDuty service associated with the routing
+key should use an escalation policy that notifies the council roster. The
+monitor is disabled with a startup warning if any required setting is absent.
 
 ### Event sequence namespaces
 
@@ -385,6 +465,17 @@ For any cloud provider, also export a `pg_dump` weekly to object storage (S3, GC
 
 ---
 
+## Production Docker images
+
+The indexer ships an optimized multi-stage production image
+(`indexer/Dockerfile` / `indexer/Dockerfile.indexer`): production-only
+dependencies (no dev deps), the transitive `sodium-native` native package
+stripped, docs/tests/source-maps pruned, and a non-root `appuser` runtime. The
+result is a ~140MB uncompressed (~50MB compressed) image that never runs as
+root, with the Kubernetes deployment enforcing `runAsNonRoot` and dropping all
+Linux capabilities. See [docs/kubernetes-deployment.md](docs/kubernetes-deployment.md)
+for the hardening details.
+
 ## Contributing
 
 PRs welcome. Please open an issue first for large changes.
@@ -411,3 +502,11 @@ PRs welcome. Please open an issue first for large changes.
 
 <!-- handsoff-issue-745 -->
 - #745: `init()` must be permanently irreversible after first call
+
+---
+
+## Documentation
+
+- [REST API Reference](docs/rest-api.md)
+- [Register Contract Guide](docs/register-contract.md)
+- [Bonds, Challenge Windows & Slashing Rules](docs/bonds-challenge-slashing.md)

@@ -1,39 +1,114 @@
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ─── Design tokens: light theme (default) ───────────────────────────────── */
 :root {
-  --bg: #ffffff;
-  --surface: #f6f8fa;
-  --border: #d0d7de;
-  --accent: #0969da;
-  --text: #24292f;
-  --muted: #57606a;
-  --green: #1a7f37;
-  --yellow: #9a6700;
+  /* Backgrounds */
+  --bg-primary:    #ffffff;
+  --bg-secondary:  #f6f8fa;
+  --bg-overlay:    rgba(0, 0, 0, 0.45);
+
+  /* Surfaces / cards */
+  --surface:       #f6f8fa;
+  --surface-hover: #eaeef2;
+
+  /* Borders */
+  --border-color:  #d0d7de;
+  --border-focus:  #0969da;
+
+  /* Text */
+  --text-primary:   #24292f;
+  --text-secondary: #57606a;
+  --text-inverse:   #ffffff;
+  --text-on-accent: #ffffff;
+
+  /* Accent / brand */
+  --accent:        #0969da;
+  --accent-hover:  #0860ca;
+
+  /* Semantic */
+  --green:         #1a7f37;
+  --green-bg:      #dafbe1;
+  --red:           #cf222e;
+  --red-bg:        #ffebe9;
+  --yellow:        #9a6700;
+  --yellow-bg:     #fff8c5;
+
+  /* Shortcuts kept for backwards compat */
+  --bg:            var(--bg-primary);
+  --text:          var(--text-primary);
+  --muted:         var(--text-secondary);
+
   color-scheme: light;
 }
 
+/* ─── Dark theme: via system preference ──────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --accent: #58a6ff;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --green: #3fb950;
-    --yellow: #d29922;
+  :root:not([data-theme="light"]) {
+    --bg-primary:    #0d1117;
+    --bg-secondary:  #161b22;
+    --bg-overlay:    rgba(0, 0, 0, 0.65);
+
+    --surface:       #161b22;
+    --surface-hover: #21262d;
+
+    --border-color:  #30363d;
+    --border-focus:  #58a6ff;
+
+    --text-primary:   #e6edf3;
+    --text-secondary: #8b949e;
+    --text-inverse:   #0d1117;
+    --text-on-accent: #0d1117;
+
+    --accent:        #58a6ff;
+    --accent-hover:  #79b8ff;
+
+    --green:         #3fb950;
+    --green-bg:      #122119;
+    --red:           #f85149;
+    --red-bg:        #2d1117;
+    --yellow:        #d29922;
+    --yellow-bg:     #272115;
+
+    --bg:            var(--bg-primary);
+    --text:          var(--text-primary);
+    --muted:         var(--text-secondary);
+
+    color-scheme: dark;
   }
 }
 
+/* ─── Dark theme: explicit opt-in via data attribute ─────────────────────── */
 :root[data-theme="dark"] {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --border: #30363d;
-  --accent: #58a6ff;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --green: #3fb950;
-  --yellow: #d29922;
+  --bg-primary:    #0d1117;
+  --bg-secondary:  #161b22;
+  --bg-overlay:    rgba(0, 0, 0, 0.65);
+
+  --surface:       #161b22;
+  --surface-hover: #21262d;
+
+  --border-color:  #30363d;
+  --border-focus:  #58a6ff;
+
+  --text-primary:   #e6edf3;
+  --text-secondary: #8b949e;
+  --text-inverse:   #0d1117;
+  --text-on-accent: #0d1117;
+
+  --accent:        #58a6ff;
+  --accent-hover:  #79b8ff;
+
+  --green:         #3fb950;
+  --green-bg:      #122119;
+  --red:           #f85149;
+  --red-bg:        #2d1117;
+  --yellow:        #d29922;
+  --yellow-bg:     #272115;
+
+  --bg:            var(--bg-primary);
+  --text:          var(--text-primary);
+  --muted:         var(--text-secondary);
+
   color-scheme: dark;
 }
 
@@ -41,52 +116,429 @@ html, body { max-width: 100%; overflow-x: hidden; }
 
 body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; }
 
-a { color: var(--accent); text-decoration: none; }
+  --bg:            var(--bg-primary);
+  --text:          var(--text-primary);
+  --muted:         var(--text-secondary);
+
+  color-scheme: light;
+}
+
+/* ─── Base styles ─────────────────────────────────────────────────────────── */
+body {
+  background:  var(--bg-primary);
+  color:       var(--text-primary);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size:   14px;
+  line-height: 1.5;
+}
+
+a {
+  color:            var(--accent);
+  text-decoration:  none;
+}
 a:hover { text-decoration: underline; }
 
-input, select {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
+/* ─── Form elements ──────────────────────────────────────────────────────── */
+input, select, textarea {
+  background:    var(--bg-primary);
+  border:        1px solid var(--border-color);
+  color:         var(--text-primary);
   border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 14px;
-  outline: none;
+  padding:       6px 10px;
+  font-size:     14px;
+  font-family:   inherit;
+  outline:       none;
+  transition:    border-color 0.15s;
 }
-input:focus, select:focus { border-color: var(--accent); }
+input:focus, select:focus, textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow:   0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
 
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
 button {
-  background: var(--accent);
-  color: #0d1117;
-  border: none;
+  background:    var(--accent);
+  color:         var(--text-on-accent);
+  border:        none;
   border-radius: 6px;
-  padding: 6px 14px;
-  font-weight: 600;
-  cursor: pointer;
+  padding:       6px 14px;
+  font-weight:   600;
+  cursor:        pointer;
+  font-size:     14px;
+  font-family:   inherit;
+  /* Minimum 48px touch target (#1007) */
+  min-height:    48px;
+  min-width:     48px;
+  display:       inline-flex;
+  align-items:   center;
+  justify-content: center;
+  transition:    background 0.15s, opacity 0.15s;
 }
-button:hover { opacity: 0.85; }
+button:hover:not(:disabled) { background: var(--accent-hover); }
+button:disabled {
+  opacity: 0.5;
+  cursor:  not-allowed;
+}
 
+/* ─── Cards ──────────────────────────────────────────────────────────────── */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background:    var(--surface);
+  border:        1px solid var(--border-color);
   border-radius: 8px;
-  padding: 16px;
+  padding:       16px;
 }
 
+/* ─── Badges ─────────────────────────────────────────────────────────────── */
 .badge {
-  display: inline-block;
-  padding: 2px 8px;
+  display:       inline-block;
+  padding:       2px 8px;
   border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--border);
-  color: var(--text);
+  font-size:     12px;
+  font-weight:   600;
+  background:    var(--border-color);
+  color:         var(--text-primary);
 }
-.badge.green { background: #1a3a22; color: var(--green); }
-.badge.yellow { background: #3a2e0a; color: var(--yellow); }
+.badge.green  { background: var(--green-bg);  color: var(--green); }
+.badge.yellow { background: var(--yellow-bg); color: var(--yellow); }
 
-/* Mobile responsive styles */
-@media (max-width: 600px) {
+/* ─── Theme toggle ───────────────────────────────────────────────────────── */
+.theme-toggle {
+  min-height: 48px;
+  min-width:  48px;
+  padding:    0 12px;
+  background: var(--surface);
+  color:      var(--text-primary);
+  border:     1px solid var(--border-color);
+  font-size:  18px;
+  line-height: 1;
+  border-radius: 6px;
+  cursor:     pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.theme-toggle:hover {
+  background:    var(--surface-hover);
+  border-color:  var(--border-focus);
+}
+
+/* ─── Nav ─────────────────────────────────────────────────────────────────── */
+.nav-root {
+  background:    var(--surface);
+  border-bottom: 1px solid var(--border-color);
+  padding:       0 24px;
+  display:       flex;
+  align-items:   center;
+  gap:           16px;
+  min-height:    56px;
+  flex-wrap:     wrap;
+}
+
+/* ─── Main layout ─────────────────────────────────────────────────────────── */
+.app-main {
+  max-width: 1100px;
+  margin:    0 auto;
+  padding:   24px 16px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* BET SLIP (#1005 + #1007)                                                    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/* Mobile trigger: shown only on small screens */
+.bet-slip-trigger {
+  display:  none;
+  position: fixed;
+  bottom:   80px;
+  right:    16px;
+  z-index:  200;
+  min-height: 52px;
+  padding:  0 20px;
+  border-radius: 26px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  font-size: 15px;
+}
+
+/* Backdrop */
+.bet-slip-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  z-index: 300;
+}
+
+/* Main panel — desktop sidebar by default */
+.bet-slip {
+  background:    var(--surface);
+  border:        1px solid var(--border-color);
+  border-radius: 10px;
+  padding:       20px;
+  display:       flex;
+  flex-direction: column;
+  gap:           16px;
+}
+
+.bet-slip__header {
+  display:       flex;
+  align-items:   center;
+  justify-content: space-between;
+}
+
+.bet-slip__title {
+  font-size:   16px;
+  font-weight: 700;
+  color:       var(--text-primary);
+}
+
+/* Close button — hidden on desktop, visible inside mobile drawer */
+.bet-slip__close {
+  display:       none;
+  background:    transparent;
+  border:        1px solid var(--border-color);
+  color:         var(--text-secondary);
+  border-radius: 50%;
+  min-height:    36px;
+  min-width:     36px;
+  padding:       0;
+  font-size:     18px;
+  line-height:   1;
+}
+
+.bet-slip__market { font-size: 13px; }
+
+.bet-slip__section { display: flex; flex-direction: column; gap: 6px; }
+
+.bet-slip__label {
+  font-size:   13px;
+  font-weight: 600;
+  color:       var(--text-secondary);
+}
+
+.bet-slip__input {
+  width:     100%;
+  padding:   10px 12px;
+  font-size: 16px; /* prevent iOS zoom */
+  min-height: 48px;
+}
+
+.bet-slip__hint {
+  font-size: 11px;
+  color:     var(--text-secondary);
+}
+
+.bet-slip__slider {
+  width:  100%;
+  cursor: pointer;
+  accent-color: var(--accent);
+  height: 4px;
+}
+
+.bet-slip__slider-labels {
+  display:         flex;
+  justify-content: space-between;
+  font-size:       11px;
+  color:           var(--text-secondary);
+}
+
+/* Quick-select chips */
+.bet-slip__chips {
+  display:   flex;
+  gap:       8px;
+  flex-wrap: wrap;
+}
+
+.bet-slip__chip {
+  background:    var(--bg-primary);
+  border:        1px solid var(--border-color);
+  color:         var(--text-primary);
+  border-radius: 20px;
+  padding:       0 14px;
+  min-height:    40px;
+  font-size:     13px;
+  font-weight:   600;
+  cursor:        pointer;
+  transition:    background 0.15s, border-color 0.15s;
+}
+.bet-slip__chip:hover { background: var(--surface-hover); }
+.bet-slip__chip--active {
+  background:   var(--accent);
+  border-color: var(--accent);
+  color:        var(--text-on-accent);
+}
+
+/* Payout breakdown table */
+.bet-slip__breakdown {
+  background:    var(--bg-primary);
+  border:        1px solid var(--border-color);
+  border-radius: 8px;
+  padding:       12px;
+  display:       flex;
+  flex-direction: column;
+  gap:           8px;
+}
+
+.bet-slip__row {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  font-size:       13px;
+}
+.bet-slip__row--highlight { font-size: 14px; font-weight: 700; }
+
+.bet-slip__row-label  { color: var(--text-secondary); }
+.bet-slip__row-value  { font-weight: 600; text-align: right; }
+.bet-slip__row-value--accent { color: var(--accent); }
+.bet-slip__row-value--green  { color: var(--green); }
+.bet-slip__row-value--red    { color: var(--red); }
+.bet-slip__row-value--muted  { color: var(--text-secondary); font-weight: 400; }
+
+.bet-slip__divider {
+  height:     1px;
+  background: var(--border-color);
+  margin:     4px 0;
+}
+
+/* Place-bet CTA */
+.bet-slip__cta {
+  width:         100%;
+  min-height:    52px;
+  font-size:     15px;
+  border-radius: 8px;
+}
+
+.bet-slip__confirm {
+  font-size:  12px;
+  color:      var(--green);
+  text-align: center;
+}
+
+/* ─── Mobile: bottom drawer (#1007) ──────────────────────────────────────── */
+@media (max-width: 639px) {
+  /* Show the floating trigger */
+  .bet-slip-trigger { display: flex; }
+
+  /* Show backdrop when open */
+  .bet-slip--open ~ .bet-slip-backdrop,
+  .bet-slip-backdrop { display: block; }
+
+  /* Panel becomes a bottom sheet */
+  .bet-slip {
+    position:       fixed;
+    bottom:         0;
+    left:           0;
+    right:          0;
+    z-index:        400;
+    border-radius:  16px 16px 0 0;
+    max-height:     92dvh;
+    overflow-y:     auto;
+    /* Hidden off-screen by default */
+    transform:      translateY(110%);
+    transition:     transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Slide up when open */
+  .bet-slip--open {
+    transform: translateY(0);
+  }
+
+  /* Show the close X inside the drawer on mobile */
+  .bet-slip__close { display: flex; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* REFERRALS PAGE (#1003)                                                       */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.referrals-page {
+  display:        flex;
+  flex-direction: column;
+  gap:            20px;
+}
+
+.referrals-steps__list {
+  padding-left: 20px;
+  display:      flex;
+  flex-direction: column;
+  gap:          8px;
+  font-size:    14px;
+  color:        var(--text-primary);
+}
+
+.referral-url-box {
+  display:       flex;
+  align-items:   stretch;
+  border:        1px solid var(--border-color);
+  border-radius: 6px;
+  overflow:      hidden;
+  background:    var(--bg-primary);
+}
+
+.referral-url-box__url {
+  flex:        1;
+  padding:     10px 12px;
+  font-family: monospace;
+  font-size:   12px;
+  color:       var(--text-secondary);
+  word-break:  break-all;
+  background:  transparent;
+  overflow:    hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.referral-url-box__copy {
+  border-left:   1px solid var(--border-color);
+  border-radius: 0;
+  padding:       0 16px;
+  min-height:    48px;
+  font-size:     13px;
+  white-space:   nowrap;
+}
+
+/* Social share buttons */
+.share-buttons {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       12px;
+}
+
+.share-btn {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           8px;
+  padding:       0 18px;
+  min-height:    48px;
+  border-radius: 6px;
+  font-weight:   600;
+  font-size:     14px;
+  text-decoration: none;
+  transition:    opacity 0.15s, filter 0.15s;
+  color:         #fff;
+}
+.share-btn:hover { opacity: 0.88; text-decoration: none; }
+
+.share-btn--x         { background: #000000; }
+.share-btn--telegram  { background: #229ed9; }
+.share-btn--whatsapp  { background: #25d366; }
+
+/* Referral earnings card */
+.referrals-earnings__stat {
+  display:     flex;
+  flex-direction: column;
+  gap:         4px;
+}
+
+.referrals-earnings__amount {
+  font-size:   28px;
+  font-weight: 700;
+  color:       var(--accent);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* MOBILE RESPONSIVE LAYOUT (#1007)                                            */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/* Single-column layout under 640px */
+@media (max-width: 639px) {
   body { font-size: 13px; }
 
   input, select {
@@ -139,4 +591,141 @@ button:hover { opacity: 0.85; }
     width: 100%;
     text-align: left;
   }
+
+  /* Chips wrap and take full usable width */
+  .bet-slip__chips { gap: 6px; }
+
+  .bet-slip__chip {
+    flex:       1 1 auto;
+    min-height: 44px;
+    text-align: center;
+  }
+
+  /* Share buttons stack on small screens */
+  .share-buttons { flex-direction: column; }
+  .share-btn { justify-content: center; }
+}
+
+/* Tablet: 640px–1023px — two columns max */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-main { padding: 20px 16px; }
+}
+
+/* Navigation header used by Nav.tsx */
+.nav-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-bar {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-search {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  max-width: 480px;
+}
+
+.nav-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 10px;
+}
+
+@media (max-width: 700px) {
+  .nav-bar { flex-wrap: wrap; }
+  .nav-toggle { display: inline-block; }
+  .nav-links { display: none; flex-direction: column; align-items: stretch; width: 100%; }
+  .nav-links.open { display: flex; }
+  .nav-search { max-width: none; }
+}
+
+/* Pending-state spinner */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Optimistic bet rows */
+.bet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.bet-row:last-child { border-bottom: none; }
+
+.badge.pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--yellow);
+}
+
+/* Toast notifications */
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+}
+
+.toast-error { border-color: #d1242f; }
+.toast-success { border-color: #2ea043; }
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
 }

@@ -3,13 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://*.stellar.org; frame-ancestors 'none'; object-src 'none';" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <title>Soroban Smart Block Explorer</title>
     <meta name="description" content="Soroban Smart Block Explorer — Human-readable Soroban contract events on Stellar." />
     <link rel="canonical" href="https://explorer.soroban.network" />
-    <meta property="og:title" content="Soroban Smart Block Explorer" />
+
+    <!-- OpenGraph (#1003: dynamic referral share cards) -->
+    <meta property="og:title"       content="Soroban Smart Block Explorer" />
     <meta property="og:description" content="Human-readable Soroban contract events on Stellar." />
-    <meta property="og:url" content="https://explorer.soroban.network" />
-    <meta property="og:type" content="website" />
+    <meta property="og:url"         content="https://explorer.soroban.network" />
+    <meta property="og:type"        content="website" />
+    <meta property="og:image"       content="https://explorer.soroban.network/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name"   content="Soroban Explorer" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="Soroban Smart Block Explorer" />
+    <meta name="twitter:description" content="Human-readable Soroban contract events on Stellar." />
+    <meta name="twitter:image"       content="https://explorer.soroban.network/og-image.png" />
   </head>
   <body>
     <div id="root"></div>

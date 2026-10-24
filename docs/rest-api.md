@@ -141,7 +141,16 @@ Errors use a consistent shape:
 | 404    | Contract not found.                      |
 | 500    | Internal server error.                   |
 
+## Machine-Readable Specification & Interactive Docs
+
+The authoritative, machine-readable specification for every public endpoint is generated automatically into [`docs/openapi.json`](./openapi.json) as part of the build. Use it to generate clients, run contract tests, or import the API into tooling such as Postman or Insomnia.
+
+An interactive Swagger UI is served at `/docs` (for example, `http://localhost:8080/docs`). It is available in local development and staging environments, and lets you browse endpoints, inspect schemas, and try requests directly from the browser.
+
+If this document and the generated OpenAPI spec ever disagree, the OpenAPI spec is authoritative.
+
 ## See Also
 
+- [OpenAPI specification](./openapi.json)
 - [Registering a contract](./register-contract.md)
 - [ABI schema reference](./abi-schema.md)

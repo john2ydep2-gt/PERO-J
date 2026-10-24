@@ -17,15 +17,19 @@ export function SkeletonBar({ width = "100%", height = 16 }: { width?: string | 
 }
 
 export interface SkeletonProps {
-  variant?: "table" | "card";
+  variant?: "table" | "card" | "chart";
   rows?: number;
+  /** Reserved height (px) for chart placeholders to prevent layout shift (CLS). */
+  height?: number;
 }
 
 /**
- * Skeleton placeholder that mirrors the shape of an EventTable row or detail card.
- * Renders `rows` placeholder rows to reduce layout shift (CLS) when data loads.
+ * Skeleton placeholder that mirrors the shape of an EventTable row, detail card,
+ * or a lazy-loaded chart. Renders `rows` placeholder rows to reduce layout shift
+ * (CLS) when data loads. The `chart` variant reserves a fixed height so the
+ * dynamically imported chart chunk can swap in without shifting the layout.
  */
-export default function Skeleton({ variant = "table", rows = 5 }: SkeletonProps) {
+export default function Skeleton({ variant = "table", rows = 5, height = 320 }: SkeletonProps) {
   return (
     <>
       <style>{`
@@ -35,7 +39,30 @@ export default function Skeleton({ variant = "table", rows = 5 }: SkeletonProps)
         }
       `}</style>
 
-      {variant === "card" ? (
+      {variant === "chart" ? (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            width: "100%",
+            height,
+            padding: 16,
+            boxSizing: "border-box",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+          }}
+          aria-busy="true"
+          aria-label="Loading chart"
+        >
+          <SkeletonBar width="40%" height={14} />
+          <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 8 }}>
+            {["55%", "80%", "35%", "70%", "45%", "90%", "60%"].map((h, i) => (
+              <SkeletonBar key={i} width="100%" height={undefined} />
+            ))}
+          </div>
+        </div>
+      ) : variant === "card" ? (
         <div style={{ display: "grid", gap: 12 }}>
           {Array.from({ length: rows }).map((_, i) => {
             const widths = ["60%", "40%", "80%", "50%", "70%", "45%"];
@@ -101,4 +128,3 @@ export default function Skeleton({ variant = "table", rows = 5 }: SkeletonProps)
     </>
   );
 }
-
