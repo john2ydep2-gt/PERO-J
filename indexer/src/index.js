@@ -235,6 +235,9 @@ async function run() {
 
   startApi();
 
+  const stopDlqWorker = startDlqRetryWorker(db, (payload) => db.upsertEvent(payload));
+  const stopDriftDetector = startDriftDetector(db);
+
   await validateNetwork(rpc);
 
   const councilMonitorConfig = getCouncilInactivityConfig();
@@ -275,6 +278,8 @@ async function run() {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
+  stopDlqWorker();
+  stopDriftDetector();
   await db.close();
   process.exit(0);
 }

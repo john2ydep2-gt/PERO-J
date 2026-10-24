@@ -294,6 +294,15 @@ export const db = {
   },
 
   /**
+   * Run an arbitrary parameterised query against the pool.
+   * @param {string} text
+   * @param {any[]} [params]
+   */
+  async query(text, params) {
+    return pool.query(text, params);
+  },
+
+  /**
    * Check if database is reachable.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<boolean>}
