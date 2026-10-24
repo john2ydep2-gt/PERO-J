@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`7cf22a7`](../../commit/7cf22a746b9d7ca31a986a121cbddbf5838e8bf2))
+
 - Compile runbook index mapping each operational alert to its exact recovery procedure ([`e1e5363`](../../commit/e1e53636779d62dc6b16d532de55a7af1e6b9ac3))
 
 - Auto-update CHANGELOG.md [skip ci] ([`10e6d72`](../../commit/10e6d7245e802c120556b5c3f6c6b182c4c736c1))
@@ -1667,6 +1669,14 @@ Closes [#936](../../issues/936)
   Closes [#937](../../issues/937)
   Closes [#945](../../issues/945)
   Closes [#946](../../issues/946)
+
+
+- Add market contract with claim/fee events, one-sided cancel, dispute timelock and dynamic bonds ([`b92d551`](../../commit/b92d551be34674e9f2e684bf912b1c502a0f2a3b))
+
+Closes [#913](../../issues/913)
+  Closes [#914](../../issues/914)
+  Closes [#917](../../issues/917)
+  Closes [#919](../../issues/919)
 
 
 - Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
