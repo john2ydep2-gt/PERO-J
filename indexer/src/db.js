@@ -858,6 +858,13 @@ export const db = {
   },
 
   /**
+   * Refresh mv_leaderboard_ranks without blocking concurrent readers.
+   */
+  async refreshLeaderboard() {
+    await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_leaderboard_ranks");
+  },
+
+  /**
    * Fetch aggregate statistics across events, contracts, and unique addresses.
    *
    * @returns {Promise<{ total_events: number, total_contracts: number, unique_addresses: number }>}
