@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`6dc3378`](../../commit/6dc33781ee4f6612f3b0679490763b64ba7ca084))
+
 - Auto-update CHANGELOG.md [skip ci] ([`1bdab8d`](../../commit/1bdab8d66a9de33c0b1a37b60d2cbdc050c43647))
 
 - Auto-update CHANGELOG.md [skip ci] ([`31bf74c`](../../commit/31bf74c43d63faff4361969f1a10c79efee17144))
@@ -1645,6 +1647,14 @@ Closes [#925](../../issues/925)
   - market: global per-address bet count/exposure caps, global and per-market max bet, admin-configurable
   - market: ("council","voted") and ("council","threshold_reached") events
   - indexer: bet-placed handler, atomic bets/markets update, idempotent on (tx_hash, event_index)
+
+
+- Add oracle daemon, auto-submitter, DLQ retry worker and drift detector ([`2774d5e`](../../commit/2774d5e683b1e8292304bd6e8d24dc20b201df0f))
+
+Closes [#936](../../issues/936)
+  Closes [#937](../../issues/937)
+  Closes [#945](../../issues/945)
+  Closes [#946](../../issues/946)
 
 
 - Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
