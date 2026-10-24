@@ -1,0 +1,43 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: local
+
+scrape_configs:
+  - job_name: indexer
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["indexer:3001"]
+        labels:
+          env: local
+          component: indexer
+
+  - job_name: oracle
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["oracle:3002"]
+        labels:
+          env: local
+          component: oracle
+
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:3000"]
+        labels:
+          env: local
+          component: api
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          env: local
+          component: postgres
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          env: local

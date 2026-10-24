@@ -3,12 +3,12 @@ import { SorobanRpc, StrKey } from "@stellar/stellar-sdk";
 import { startApi } from "./api.js";
 import { db } from "./db.js";
 import { registerFixtures } from "./registerFixtures.js";
-import { decode, evictContractMeta } from "./decoder.js";
 import { reloadSacMap } from "./sac.js";
 import { validateNetwork } from "./validateNetwork.js";
-import { submitEvent } from "./contract.js";
 import { resolvePollMs } from "./resolvePollMs.js";
-import { validateRawEvent } from "./eventSchema.js";
+import { handleOracleSubmission } from "./handlers/oracle_submission.js";
+import { handleOracleDispute } from "./handlers/oracle_dispute.js";
+import { handleOracleFinalized } from "./handlers/oracle_finalized.js";
 
 dotenv.config();
 
@@ -18,13 +18,6 @@ const RPC_URL = process.env.SOROBAN_RPC_URL || "https://soroban-testnet.stellar.
 const START_LEDGER = Number(process.env.START_LEDGER || 0);
 const POLL_MS = resolvePollMs();
 const RPC_ERROR_THRESHOLD = 3;
-const EXPLORER_CONTRACT_ID = process.env.SOROBAN_EXPLORER_CONTRACT_ID;
-
-/**
- * Advisory lock id used to serialize migrations across indexer instances.
- * Any two instances sharing this id will not run migrations concurrently.
- */
-const MIGRATION_LOCK_ID = 836;
 
 /**
  * Advisory lock id for the single active writer. Only the instance holding
@@ -97,14 +90,34 @@ export function extractAddresses(values, found = new Set()) {
 }
 
 export async function indexLedger(ledger, rpcClient = rpc) {
-  // getEvents supports cursor-based pagination; we use ledger range here
-  const res = await rpcClient.getEvents({
-    startLedger: ledger,
-    filters: [{ type: "contract" }],
-    limit: 200,
-  });
+  const latestLedger = await rpcClient.getLatestLedger();
+  const events = [];
+  let cursor;
+  while (true) {
+    const res = await rpcClient.getEvents({
+      startLedger: ledger,
+      cursor,
+      filters: [{ type: "contract" }],
+      limit: 200,
+    });
+    if (res.latestLedger !== latestLedger.sequence) {
+      throw new Error(
+        `RPC ledger changed during event fetch (${res.latestLedger} -> ${latestLedger.sequence}); retrying`
+      );
+    }
+    events.push(...res.events);
+    if (res.events.length < 200) {
+      break;
+    }
+    const nextCursor = res.events.at(-1)?.pagingToken;
+    if (!nextCursor || nextCursor === cursor) {
+      throw new Error("RPC event pagination did not advance; retrying");
+    }
+    cursor = nextCursor;
+  }
 
-  for (const ev of res.events) {
+  const decodedEvents = [];
+  for (const ev of events) {
     // On-chain `update` events from the explorer contract let us invalidate
     // the in-memory ABI cache immediately, instead of waiting for the 60s LRU
     // TTL to expire, so an ABI update is reflected near-instantly.
@@ -113,36 +126,52 @@ export async function indexLedger(ledger, rpcClient = rpc) {
       if (targetContractId) {
         evictContractMeta(targetContractId);
       }
-      continue;
     }
 
-    const validation = validateRawEvent(ev);
-    if (!validation.ok) {
-      await sendToDeadLetter(ev, `schema validation failed: ${validation.reason}`);
-      continue;
-    }
-
-    let decoded;
-    try {
-      decoded = await decode(ev);
-    } catch (err) {
-      await sendToDeadLetter(ev, `decode failed: ${err?.message ?? String(err)}`);
-      continue;
-    }
-    decoded.event_addresses = extractAddresses([decoded.topic, decoded.data]);
-    const onchain_seq = await submitEvent(decoded);
-    if (onchain_seq !== null) {
-      decoded.onchain_seq = onchain_seq;
+    const nextCursor = res.cursor;
+    if (
+      reachedEndLedger ||
+      res.events.length === 0 ||
+      !nextCursor ||
+      nextCursor === paginationCursor
+    ) {
+      break;
     }
     await db.upsertEvent(decoded);
+    // Fire-and-forget after commit: Redis failures never block indexing.
+    void publish(`stellar:events:${decoded.function}`, {
+      type: decoded.function,
+      market_id: decoded.contract_id,
+      timestamp: new Date().toISOString(),
+      state: { ledger: decoded.ledger, tx_hash: decoded.tx_hash, description: decoded.description },
+    });
     console.log(`[${ev.ledger}] ${decoded.function}: ${decoded.description}`);
+
+    // Route oracle events to their handlers
+    const topics = ev.topic.map((t) => {
+      try {
+        return typeof t.sym === "function" ? t.sym() : t.value?.()?.sym?.() ?? String(t);
+      } catch {
+        return String(t);
+      }
+    });
+    
+    const data = ev.value;
+
+    if (decoded.function === "oracle_submission") {
+      await handleOracleSubmission(decoded, topics, data);
+    } else if (decoded.function === "oracle_dispute") {
+      await handleOracleDispute(decoded, topics, data);
+    } else if (decoded.function === "oracle_finalized") {
+      await handleOracleFinalized(decoded, topics, data);
+    }
   }
 
   // Record the time we finished processing this ledger batch
   health.lastIndexedAt = Date.now();
-  health.lastLedger = res.latestLedger;
+  health.lastLedger = latestLedger.sequence;
 
-  return res.latestLedger;
+  return latestLedger.sequence;
 }
 
 /**
@@ -200,33 +229,18 @@ export function isExplorerUpdateEvent(ev) {
   }
 }
 
-/**
- * Extract the strkey contract id (C…) of the contract whose ABI was updated
- * from an explorer `update` event, or null if it cannot be recovered.
- *
- * @param {object} ev - Raw event object from SorobanRpc.getEvents()
- * @returns {string|null}
- */
-export function updateEventContractId(ev) {
-  const topic = ev.topic?.[1];
-  if (!topic) {
-    return null;
-  }
-  try {
-    const bytes = topic.bytes();
-    return StrKey.encodeContract(bytes);
-  } catch {
-    return null;
-  }
+  return onlyLedger ?? latestLedger;
 }
 
 let shuttingDown = false;
+let stopCouncilInactivityMonitor;
 
 function gracefulShutdown() {
   if (shuttingDown) {
     return;
   }
   shuttingDown = true;
+  stopCouncilInactivityMonitor?.();
   console.log("Shutdown signal received, finishing current iteration…");
 }
 
@@ -239,68 +253,46 @@ process.on("SIGHUP", () => {
 });
 
 /**
- * Run migrations under a Postgres advisory lock so that two indexer instances
- * starting at the same time cannot run migrations concurrently (which would
- * cause duplicate-key errors or partial state).
+ * Run migrations before starting the API/poller.
  *
- * The lock is always released in `finally`; a failed unlock is logged but
- * never masks the original migration error.
+ * `db.init()` acquires its own Postgres advisory lock internally (see db.js),
+ * so two indexer instances starting concurrently cannot run migrations at the
+ * same time. There is no need for an additional outer lock here.
  */
-async function initWithMigrationLock() {
-  await db.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
-  try {
-    await db.init();
-  } catch (err) {
-    // Roll back any partial migration state before releasing the lock.
-    try {
-      await db.query("ROLLBACK");
-    } catch (rollbackErr) {
-      console.error("[migrations] rollback failed:", rollbackErr.message);
-    }
-    throw err;
-  } finally {
-    try {
-      await db.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID]);
-    } catch (unlockErr) {
-      console.error("[migrations] failed to release advisory lock:", unlockErr.message);
-    }
-  }
+async function runMigrations() {
+  await db.init();
 }
 
 async function run() {
-  await initWithMigrationLock();
+  await runMigrations();
   await registerFixtures().catch((err) => {
     console.error("[fixtures] failed to register ABI fixtures:", err.message);
   });
 
   startApi();
 
-  // Single-writer: block in standby until we own the writer lock.
-  while (!shuttingDown && !(await db.tryAcquireWriterLock(INDEXER_LOCK_ID))) {
-    console.log("Another indexer holds the writer lock — standing by");
-    await new Promise((r) => setTimeout(r, WRITER_STANDBY_POLL_MS));
-  }
-  if (shuttingDown) {
-    await db.close();
-    process.exit(0);
-  }
-  console.log("Writer lock acquired — this instance is the active indexer");
-
-  let lockLost = false;
-  const heartbeat = setInterval(async () => {
-    if (!(await db.renewWriterLock())) {
-      lockLost = true;
-      console.error("Writer lock lost — shutting down to avoid concurrent writes");
-      gracefulShutdown();
-    }
-  }, WRITER_HEARTBEAT_MS);
+  const stopDlqWorker = startDlqRetryWorker(db, (payload) => db.upsertEvent(payload));
+  const stopDriftDetector = startDriftDetector(db);
 
   await validateNetwork(rpc);
+
+  const councilMonitorConfig = getCouncilInactivityConfig();
+  if (councilMonitorConfig) {
+    stopCouncilInactivityMonitor = startCouncilInactivityMonitor({
+      fetchActive: oracleDisputes.fetchActive,
+      config: councilMonitorConfig,
+    });
+    console.log("[oracle monitor] council inactivity monitoring enabled");
+  } else {
+    console.warn(
+      "[oracle monitor] disabled: configure ORACLE_CONTRACT_ID, PAGERDUTY_ROUTING_KEY, and ORACLE_COUNCIL_ROSTER",
+    );
+  }
 
   const persisted = await db.getCursor();
   let cursor = persisted ?? (START_LEDGER || (await rpc.getLatestLedger()).sequence - 100);
   if (persisted !== null) {
-    console.log(`Resuming from persisted ledger ${cursor}`);
+    console.log(`Resuming after persisted ledger ${persisted}`);
   }
 
   let consecutiveErrors = 0;
@@ -309,7 +301,6 @@ async function run() {
     try {
       const latest = await indexLedger(cursor);
       cursor = latest + 1;
-      await db.setCursor(latest);
       consecutiveErrors = 0;
     } catch (err) {
       consecutiveErrors++;
@@ -323,8 +314,8 @@ async function run() {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
-  clearInterval(heartbeat);
-  await db.releaseWriterLock(INDEXER_LOCK_ID);
+  stopDlqWorker();
+  stopDriftDetector();
   await db.close();
   process.exit(lockLost ? 1 : 0);
 }

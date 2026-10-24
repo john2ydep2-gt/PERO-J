@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-page
+  labels:
+    app: status-page
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: status-page
+  template:
+    metadata:
+      labels:
+        app: status-page
+    spec:
+      containers:
+        - name: status-page
+          image: ghcr.io/john2ydep2-gt/pero-j-status-page:latest
+          ports:
+            - containerPort: 3005
+          env:
+            - name: STATUS_PORT
+              value: "3005"
+            - name: INDEXER_URL
+              value: "http://indexer:3001"
+            - name: API_URL
+              value: "http://indexer:3001"
+            - name: RPC_URL
+              value: "https://soroban-testnet.stellar.org"
+            - name: HORIZON_URL
+              value: "https://horizon-testnet.stellar.org"
+            - name: STATUS_PROBE_INTERVAL_MS
+              value: "30000"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3005
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-page
+spec:
+  selector:
+    app: status-page
+  ports:
+    - port: 80
+      targetPort: 3005

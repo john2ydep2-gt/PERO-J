@@ -1,0 +1,53 @@
+groups:
+  - name: synthetic_probe_alerts
+    interval: 30s
+    rules:
+      - alert: FrontendDown
+        expr: probe_success{job="frontend_synthetic"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          channel: alerts-critical
+        annotations:
+          summary: "Frontend service unavailable from external probe"
+          description: "Synthetic probe targeting {{ $labels.instance }} failed to return HTTP 200 within timeout."
+
+      - alert: FrontendHighLatency
+        expr: probe_duration_seconds{job="frontend_synthetic"} > 2.5
+        for: 30s
+        labels:
+          severity: critical
+          channel: alerts-critical
+        annotations:
+          summary: "Frontend response time exceeds 2.5s SLA"
+          description: "Synthetic probe response time for {{ $labels.instance }} is {{ $value }}s (> 2.5 seconds SLA)."
+
+      - alert: SorobanRPCDown
+        expr: probe_success{job="soroban_rpc_synthetic"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          channel: alerts-critical
+        annotations:
+          summary: "Soroban RPC probe unreachable"
+          description: "Soroban RPC endpoint at {{ $labels.instance }} failed health probe."
+
+      - alert: SorobanRPCHighLatency
+        expr: probe_duration_seconds{job="soroban_rpc_synthetic"} > 2.5
+        for: 30s
+        labels:
+          severity: critical
+          channel: alerts-critical
+        annotations:
+          summary: "Soroban RPC response latency exceeds 2.5s"
+          description: "Soroban RPC getHealth probe duration is {{ $value }}s (> 2.5s threshold)."
+
+      - alert: IndexerHealthCheckFailed
+        expr: probe_success{job="indexer_health_synthetic"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          channel: alerts-critical
+        annotations:
+          summary: "Indexer /health endpoint failure"
+          description: "Backend indexer /health check failed HTTP 200 or returned unhealthy status."

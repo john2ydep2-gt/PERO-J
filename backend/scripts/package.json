@@ -1,0 +1,29 @@
+{
+  "name": "pero-j-backend-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Operational scripts for PERO-J (secret rotation, maintenance)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "rotate": "tsx rotate-secrets.ts",
+    "rotate:status": "tsx rotate-secrets.ts status",
+    "rotate:db": "tsx rotate-secrets.ts db",
+    "rotate:api-key": "tsx rotate-secrets.ts api-key",
+    "rotate:api-key:finalize": "tsx rotate-secrets.ts api-key:finalize",
+    "rotate:hot-wallet": "tsx rotate-secrets.ts hot-wallet",
+    "rotate:hot-wallet:finalize": "tsx rotate-secrets.ts hot-wallet:finalize",
+    "typecheck": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2022 --skipLibCheck rotate-secrets.ts"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "12.3.0",
+    "pg": "8.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "5.4.5"
+  }
+}

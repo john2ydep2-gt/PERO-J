@@ -1,0 +1,51 @@
+name: TLS Certificate Expiry Monitor
+
+on:
+  schedule:
+    # Run daily at 07:00 UTC
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: >
+          Space-separated list of HOST:PORT pairs to check
+          (overrides the repository variable TLS_HOSTS).
+        required: false
+        default: ''
+
+jobs:
+  check-tls:
+    name: Check TLS certificate expiry
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make monitoring script executable
+        run: chmod +x scripts/check-tls-expiry.sh
+
+      - name: Check TLS certificate expiry
+        env:
+          # Resolve hosts: manual input → repository variable → empty (skipped gracefully)
+          HOSTS_TO_CHECK: >-
+            ${{
+              inputs.hosts != '' && inputs.hosts
+              || vars.TLS_HOSTS
+            }}
+          # Days-remaining threshold before alerting
+          WARN_DAYS: '15'
+          # Optional: set ALERT_WEBHOOK_URL as a repository secret to receive
+          # Slack / Discord / generic webhook notifications on expiry warnings.
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          # Optional: set NOTIFY_EMAIL as a repository secret for e-mail alerts.
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: ./scripts/check-tls-expiry.sh
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::One or more TLS certificates are expiring soon or have already expired."
+          echo "::error::Check the job log above for details and renew the affected certificates."
+          echo "::notice::Automated renewal: ensure certbot renew (or equivalent) is configured"
+          echo "::notice::on the production host and runs at least twice a day via cron/systemd."
