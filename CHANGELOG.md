@@ -1018,6 +1018,10 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Compile runbook index mapping each operational alert to its exact recovery procedure ([`e1e5363`](../../commit/e1e53636779d62dc6b16d532de55a7af1e6b9ac3))
+
+- Auto-update CHANGELOG.md [skip ci] ([`10e6d72`](../../commit/10e6d7245e802c120556b5c3f6c6b182c4c736c1))
+
 - Auto-update CHANGELOG.md [skip ci] ([`c2742ac`](../../commit/c2742ac870d86c0ce1d6d7af85ebdf25dfe7092d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`0670956`](../../commit/067095630146ab2da49e25c029990bffe8a4be84))
