@@ -1,8 +1,57 @@
-FROM node:20-alpine
-RUN apk add --no-cache curl
+# ─────────────────────────────────────────────────────────────────────────────
+# PERO-J indexer — optimized multi-stage production image (issue #1015).
+#
+# This is the default build target (`docker build indexer/`) and is the image
+# used by the staging deployment pipeline. It mirrors `Dockerfile.indexer`.
+#
+# The PERO-J backend is a single Node.js service (the "indexer") that serves
+# the REST API, polls the Soroban RPC, and optionally submits decoded events
+# on-chain (the "oracle" role). Because the API, indexer, and oracle roles are
+# all handled by one process, this single production image covers all three;
+# there are no separate API/oracle services to build distinct images for.
+#
+# The indexer is plain JavaScript run directly with `node` (no TypeScript
+# compile step), so the multi-stage build installs production dependencies and
+# copies only the runtime code — there are no "TypeScript binaries" to emit.
+#
+# Stage 1 (deps)    — install production-only node_modules and prune bloat.
+# Stage 2 (runtime) — minimal alpine runtime, non-root `appuser`, production code only.
+#
+# Result: ~140MB uncompressed / ~50MB compressed, runs as non-root.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: production dependencies ────────────────────────────────────────
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
-COPY src/ ./src/
-CMD ["node", "src/index.js"]
+RUN npm ci --omit=dev \
+    && npm cache clean --force \
+    # sodium-native (transitive via @stellar/stellar-base) ships ~14MB of
+    # prebuilt native binaries. @stellar/stellar-base wraps its require() in a
+    # try/catch and falls back to the pure-JS `tweetnacl` at runtime, so the
+    # native package is safe to strip. The indexer mostly decodes XDR and calls
+    # RPC; it does not high-volume sign, so tweetnacl is sufficient.
+    && rm -rf node_modules/sodium-native \
+    # Trim documentation, source maps, and test/doc directories from deps to
+    # keep the runtime layer minimal. None of these are needed at runtime.
+    # `-exec ... \;` is used (not `-delete`/`{} +`) because node:20-alpine
+    # ships busybox find, which lacks those forms.
+    && find node_modules -type f \( -name "*.md" -o -name "*.markdown" -o -name "*.map" -o -name "*.flow" \) -exec rm -f {} \; \
+    && find node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" -o -name "docs" -o -name "doc" \) -prune -exec rm -rf {} \;
 
+# ── Stage 2: minimal non-root runtime ───────────────────────────────────────
+FROM node:20-alpine AS runtime
+# Create a dedicated non-root user/group with a fixed UID/GID so the runtime
+# (and the Kubernetes securityContext) can enforce non-root deterministically.
+RUN addgroup -S -g 10001 appuser && adduser -S -G appuser -u 10001 appuser
+WORKDIR /app
+# Production node_modules only (no dev deps, sodium stripped, pruned).
+COPY --from=deps /app/node_modules ./node_modules
+# Application package.json (carries "type": "module" for ESM) and source.
+COPY package.json ./
+COPY src/ ./src/
+# Drop root privileges.
+USER appuser
+ENV NODE_ENV=production
+EXPOSE 3001
+CMD ["node", "src/index.js"]

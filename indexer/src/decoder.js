@@ -3,6 +3,7 @@ import { scValToNative, StrKey } from "@stellar/stellar-sdk";
 import { db } from "./db.js";
 import { detectSac } from "./sac.js";
 import { scValToJs } from "./scval.js";
+import { incCounter } from "./metrics.js";
 
 /** @typedef {import('./types.js').DecodedEvent} DecodedEvent */
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
@@ -61,6 +62,21 @@ export async function decode(ev) {
     }
   }
   const fnAbi = meta?.functions?.find((f) => f.name === fnName);
+
+  if (!fnAbi) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        msg: "unmapped contract event topic",
+        topic: fnName,
+        contractId,
+        ledger: ev.ledger,
+      }),
+    );
+    incCounter("indexer_unmapped_events_total", "Contract events with no mapped ABI topic", {
+      topic: fnName,
+    });
+  }
 
   const { isSac, assetCode } = detectSac(contractId);
   const contractLabel = isSac
@@ -189,6 +205,18 @@ function buildDescription(fn, args, data, contractName) {
     case "withdraw": {
       const [from, amount, token] = args;
       return `Address ${fmt(from)} withdrew ${amount} ${token ?? ""} from ${contractName}`;
+    }
+    case "oracle_submission": {
+      const [marketId, submitter, outcome] = args;
+      return `Oracle ${fmt(submitter)} submitted outcome "${outcome}" for market ${marketId} on ${contractName}`;
+    }
+    case "oracle_dispute": {
+      const [marketId, disputer] = args;
+      return `Address ${fmt(disputer)} disputed oracle submission for market ${marketId} on ${contractName}`;
+    }
+    case "oracle_finalized": {
+      const [marketId, finalOutcome] = args;
+      return `Oracle finalized market ${marketId} with outcome "${finalOutcome}" on ${contractName}`;
     }
     default:
       return genericDescription(fn, args, data, contractName);

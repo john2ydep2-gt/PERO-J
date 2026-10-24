@@ -1,0 +1,16 @@
+{
+  "election": {
+    "id": "us-example-2024",
+    "status": "certified",
+    "races": [
+      {
+        "id": "president-example",
+        "status": "certified",
+        "candidates": [
+          { "id": "candidate-a", "votes": 51000000, "winner": false },
+          { "id": "candidate-b", "votes": 52000000, "winner": true }
+        ]
+      }
+    ]
+  }
+}

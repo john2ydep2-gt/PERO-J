@@ -1,7 +1,7 @@
 -include .env
 export EXPLORER_CONTRACT_ID
 
-.PHONY: build test deploy redeploy indexer frontend clean seed-testnet load-test changelog db dev-docker
+.PHONY: build test deploy redeploy indexer frontend clean seed-testnet load-test changelog db dev-docker backup backup-upload backup-restore
 
 # ── Contract ──────────────────────────────────────────────────────────────────
 build:
@@ -158,6 +158,24 @@ changelog:
 changelog-preview:
 	git-cliff --config cliff.toml --unreleased
 
+# ── Database backup (#1018) ───────────────────────────────────────────────────
+# Run a local pg_dump base backup and optionally upload to S3.
+# Set BACKUP_S3_BUCKET (and optionally BACKUP_S3_PREFIX / BACKUP_S3_REGION)
+# to enable the S3 upload step.  See docs/backup.md for full configuration.
+backup:
+	./scripts/backup.sh
+
+# Upload the most recent local dump to S3.
+# Requires: BACKUP_S3_BUCKET set, aws CLI available, valid AWS credentials.
+backup-upload:
+	BACKUP_S3_BUCKET="$${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET must be set}" \
+	  ./scripts/backup.sh
+
+# Restore the most recent local dump to a temporary test database and verify
+# row counts for the events and contracts tables.  Drops the test DB on exit.
+backup-restore:
+	./scripts/backup-restore-test.sh
+
 help:
 	@printf "Available targets:\n"
 	@printf "  make build              Build the contract WASM\n"
@@ -166,5 +184,8 @@ help:
 	@printf "  make dev                Start the indexer and frontend\n"
 	@printf "  make dev-docker         Start the full stack via Docker Compose\n"
 	@printf "  make e2e                Run the full end-to-end suite\n"
+	@printf "  make backup             Run a local pg_dump base backup\n"
+	@printf "  make backup-upload      Run a backup and upload to S3 (requires BACKUP_S3_BUCKET)\n"
+	@printf "  make backup-restore     Restore latest local dump into a test DB and verify\n"
 	@printf "  make changelog          Update CHANGELOG.md with unreleased changes\n"
 	@printf "  make changelog-preview  Preview unreleased changes without modifying files\n"

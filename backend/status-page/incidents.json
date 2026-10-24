@@ -1,0 +1,28 @@
+{
+  "incidents": [
+    {
+      "id": "2026-09-14-indexer-lag",
+      "title": "Indexer lag after Soroban RPC upgrade",
+      "impact": "major",
+      "components": ["indexer", "stellar-rpc"],
+      "startedAt": "2026-09-14T08:12:00Z",
+      "resolvedAt": "2026-09-14T09:47:00Z",
+      "updates": [
+        { "at": "2026-09-14T08:12:00Z", "status": "investigating", "message": "Indexer lag exceeded 5 minutes. Bet totals may appear stale." },
+        { "at": "2026-09-14T08:40:00Z", "status": "identified", "message": "Upstream RPC provider rotated nodes and our event cursor was rejected as out of retention range." },
+        { "at": "2026-09-14T09:15:00Z", "status": "monitoring", "message": "Cursor reset to the oldest retained ledger; backfill in progress." },
+        { "at": "2026-09-14T09:47:00Z", "status": "resolved", "message": "Indexer is fully caught up. No funds were affected." }
+      ],
+      "postMortem": {
+        "summary": "For 95 minutes the indexer stopped ingesting events, causing stale market totals in the UI. On-chain state and user funds were never at risk.",
+        "rootCause": "The RPC provider upgrade reduced event retention; the persisted cursor pointed to a pruned ledger and the poller retried indefinitely without alerting.",
+        "resolution": "Reset the cursor to the oldest retained ledger and backfilled from Horizon.",
+        "actionItems": [
+          "Alert when indexer lag exceeds LAG_ALERT_THRESHOLD_S for more than 2 minutes",
+          "Automatically fall back to the oldest retained ledger when the cursor is pruned",
+          "Publish incidents on the public status page"
+        ]
+      }
+    }
+  ]
+}

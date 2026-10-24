@@ -1,0 +1,18 @@
+# Grafana dashboard provisioning for PERO-J.
+# Grafana loads every JSON file under /var/lib/grafana/dashboards/pero-j on
+# startup and re-scans every 30s, so edits to infra/monitoring/dashboards/*.json
+# are picked up automatically without manual import.
+apiVersion: 1
+
+providers:
+  - name: pero-j
+    orgId: 1
+    folder: PERO-J
+    folderUid: pero-j
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/pero-j
+      foldersFromFilesStructure: false

@@ -17,10 +17,19 @@ spec:
         app.kubernetes.io/name: pero-j
         app.kubernetes.io/component: indexer
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       containers:
         - name: indexer
           image: pero-j-indexer:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 3001
