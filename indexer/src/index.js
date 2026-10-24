@@ -168,6 +168,13 @@ export async function indexLedger(ledger, rpcClient = rpc) {
     }
   }
 
+  // Commit the whole ledger batch atomically in a single transaction.
+  await db.upsertEvents(batch);
+  for (const decoded of batch) {
+    console.log(`[${decoded.ledger}] ${decoded.function}: ${decoded.description}`);
+  }
+  eventsProcessed.inc(batch.length);
+
   // Record the time we finished processing this ledger batch
   health.lastIndexedAt = Date.now();
   health.lastLedger = latestLedger.sequence;
@@ -300,11 +307,25 @@ async function run() {
 
   while (!shuttingDown) {
     try {
+      const forkLedger = await detectReorg((start, limit) =>
+        fetchLedgerHashes(RPC_URL, start, limit)
+      );
+      if (forkLedger !== null) {
+        console.warn(`[reorg] ledger hash mismatch at ${forkLedger} — rolling back and re-indexing`);
+        await db.rollbackToLedger(forkLedger);
+        cursor = forkLedger;
+      }
+
       const latest = await indexLedger(cursor);
+      const hashes = await fetchLedgerHashes(RPC_URL, latest, 1);
+      if (hashes.has(latest)) {
+        await db.recordLedger(latest, hashes.get(latest), REORG_WINDOW);
+      }
       cursor = latest + 1;
       consecutiveErrors = 0;
     } catch (err) {
       consecutiveErrors++;
+      errors.inc();
       console.error("Indexer error:", err.message);
       if (consecutiveErrors >= RPC_ERROR_THRESHOLD) {
         console.warn(`${consecutiveErrors} consecutive RPC errors — recreating RPC client`);
