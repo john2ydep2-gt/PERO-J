@@ -1,0 +1,30 @@
+groups:
+  - name: indexer_and_rpc_alerts
+    rules:
+      - alert: IndexerStalled
+        expr: indexer_lag_ledgers > 100
+        for: 3m
+        labels:
+          severity: critical
+          service: indexer
+          tier: ingestion
+        annotations:
+          summary: "Indexer stalled with ledger lag > 100"
+          description: "Indexer has fallen behind network ledger head by {{ $value }} ledgers for more than 3 minutes."
+          dashboard_url: "https://grafana.peroj.network/d/indexer-overview"
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/INDEXER_RUNBOOK.md"
+          action: "Inspect indexer logs, verify database connection pool status, and restart indexer if stalled."
+
+      - alert: RPCHighErrorRate
+        expr: rate(rpc_errors_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: high
+          service: rpc-adapter
+          tier: infrastructure
+        annotations:
+          summary: "High RPC failure burst detected"
+          description: "Stellar RPC error rate is {{ $value | humanizePercentage }} (>0.05) over the last 5 minutes."
+          dashboard_url: "https://grafana.peroj.network/d/rpc-health"
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/ORACLE_ADAPTER_FRESHNESS.md"
+          action: "Check Stellar RPC endpoint status, monitor rate limits, and failover to backup RPC provider."

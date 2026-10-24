@@ -1,0 +1,260 @@
+name: Deploy to staging (testnet)
+
+# Automated continuous deployment to the staging environment on every merge
+# to main (issue #1014). The pipeline:
+#   1. Builds the indexer + frontend (production) Docker images and pushes
+#      them to the GitHub Container Registry (ghcr.io).
+#   2. Deploys the updated images to the `pero-j-staging` Kubernetes namespace
+#      (connected to Stellar testnet via the staging ConfigMap).
+#   3. Runs the testnet smoke test suite against the staging endpoints.
+#
+# The build step runs on every push to main. The deploy + smoke steps are
+# skipped automatically until the required staging secrets are configured
+# (see "Required secrets" below), so the workflow is safe to merge before
+# a staging cluster exists.
+#
+# Required repository secrets (configure under Settings → Secrets → Actions):
+#   KUBECONFIG_STAGING     – base64-encoded kubeconfig for the staging cluster
+#   STAGING_DATABASE_URL   – postgres connection string for the staging DB
+#   STAGING_API_ADMIN_KEY  – admin key for protected API endpoints (optional but
+#                            recommended; leave empty to disable protected routes)
+#
+# Optional repository secrets / variables:
+#   STAGING_EXPLORER_ADMIN_SECRET – secret key for on-chain event submission
+#   vars.DEPLOY_STAGING_CONTRACT = "true" – also deploy/refresh the
+#                            ExplorerContract to testnet on each run (see the
+#                            `deploy-contract-testnet` job below).
+#
+# Target: staging reflects the latest main branch within ~10 minutes of merge.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+permissions:
+  contents: read
+  packages: write # push images to ghcr.io
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false # let an in-flight deploy finish before starting the next
+
+env:
+  REGISTRY: ghcr.io
+  # ghcr image names are lowercase; the repo owner (john2ydep2-gt) is already
+  # lowercase. If the owner ever contains uppercase, switch to the
+  # docker/metadata-action to lower-case the image ref.
+  INDEXER_IMAGE: ghcr.io/${{ github.repository_owner }}/pero-j-indexer
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/pero-j-frontend
+  STAGING_NAMESPACE: pero-j-staging
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. Build and push Docker images to GHCR.
+  # Runs on every push to main regardless of staging secrets — the images are
+  # useful artefacts and the cache speeds up later deploys.
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tag
+        id: meta
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push indexer image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./indexer
+          file: ./indexer/Dockerfile
+          push: true
+          tags: |
+            ${{ env.INDEXER_IMAGE }}:${{ steps.meta.outputs.sha }}
+            ${{ env.INDEXER_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend image (production)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.sha }}
+            ${{ env.FRONTEND_IMAGE }}:staging
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image summary
+        run: |
+          echo "### Built images" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.INDEXER_IMAGE }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. Deploy updated containers to the staging cluster and run smoke tests.
+  # Skipped (steps no-op) until KUBECONFIG_STAGING + STAGING_DATABASE_URL are
+  # configured, so the workflow is merge-safe before a staging cluster exists.
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to staging & smoke test
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    env:
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Check staging secrets are configured
+        id: gate
+        env:
+          KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          if [ -z "$KUBECONFIG_STAGING" ] || [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Staging secrets are not configured — skipping deploy. Set KUBECONFIG_STAGING and STAGING_DATABASE_URL to enable automated staging deployment."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure kubectl
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          KUBECONFIG_STAGING: ${{ secrets.KUBECONFIG_STAGING }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_STAGING" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl version --client >/dev/null
+          kubectl cluster-info || true
+
+      - name: Apply staging namespace + ConfigMap
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          kubectl apply -f k8s/staging/namespace.yaml
+          kubectl apply -f k8s/staging/configmap.yaml
+
+      - name: Apply staging Secret from repository secrets
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_API_ADMIN_KEY: ${{ secrets.STAGING_API_ADMIN_KEY }}
+          STAGING_EXPLORER_ADMIN_SECRET: ${{ secrets.STAGING_EXPLORER_ADMIN_SECRET }}
+        run: |
+          kubectl create secret generic pero-secrets --namespace "${STAGING_NAMESPACE}" \
+            --from-literal=DATABASE_URL="${STAGING_DATABASE_URL}" \
+            --from-literal=API_ADMIN_KEY="${STAGING_API_ADMIN_KEY:-}" \
+            --from-literal=SOROBAN_EXPLORER_ADMIN_SECRET="${STAGING_EXPLORER_ADMIN_SECRET:-}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Deployments, Services and HPA
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          kubectl apply \
+            -f k8s/indexer-deployment.yaml \
+            -f k8s/frontend-deployment.yaml \
+            -f k8s/hpa.yaml \
+            -n "${STAGING_NAMESPACE}"
+
+      - name: Roll out new images
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          kubectl set image deployment/pero-indexer \
+            indexer="${INDEXER_IMAGE}:${IMAGE_TAG}" -n "${STAGING_NAMESPACE}"
+          kubectl set image deployment/frontend \
+            frontend="${FRONTEND_IMAGE}:${IMAGE_TAG}" -n "${STAGING_NAMESPACE}"
+
+      - name: Wait for rollouts to complete
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          kubectl rollout status deployment/pero-indexer -n "${STAGING_NAMESPACE}" --timeout=5m
+          kubectl rollout status deployment/frontend -n "${STAGING_NAMESPACE}" --timeout=5m
+
+      - name: Run testnet smoke tests
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          # Tunnel the staging frontend service to the runner, then exercise the
+          # full path: nginx → /api/* → indexer → PostgreSQL.
+          kubectl -n "${STAGING_NAMESPACE}" port-forward svc/frontend 8080:3000 >/tmp/pf.log 2>&1 &
+          PF=$!
+          trap 'kill $PF 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/; then break; fi
+            sleep 2
+          done
+          ./scripts/smoke-test.sh http://127.0.0.1:8080
+
+      - name: Deploy summary
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          echo "### Staging deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- namespace: \`${STAGING_NAMESPACE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- indexer image: \`${INDEXER_IMAGE}:${IMAGE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- frontend image: \`${FRONTEND_IMAGE}:${IMAGE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- smoke tests: passed" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. (Optional) Deploy/refresh the ExplorerContract to Stellar testnet.
+  # Off by default — enable with repository variable DEPLOY_STAGING_CONTRACT=true
+  # and the STELLAR_SECRET_KEY secret. Most staging setups reuse a stable
+  # testnet contract id configured in the staging ConfigMap; this job is for
+  # teams that want a fresh contract instance per deploy.
+  # ─────────────────────────────────────────────────────────────────────────
+  deploy-contract-testnet:
+    name: Deploy contract to testnet (optional)
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: ${{ vars.DEPLOY_STAGING_CONTRACT == 'true' }}
+    env:
+      STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify secret
+        run: |
+          if [ -z "$STELLAR_SECRET_KEY" ]; then
+            echo "::error::DEPLOY_STAGING_CONTRACT is enabled but STELLAR_SECRET_KEY is not set."
+            exit 1
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: cargo install stellar-cli --locked
+
+      - name: Build contract WASM
+        run: cargo build --target wasm32-unknown-unknown --release -p soroban-explorer-contract
+
+      - name: Deploy to testnet
+        id: deploy
+        run: |
+          stellar keys add deployer --secret-key "$STELLAR_SECRET_KEY"
+          contract_id=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/soroban_explorer_contract.wasm \
+            --source deployer --network testnet)
+          echo "Deployed ExplorerContract to testnet: $contract_id"
+          echo "contract_id=$contract_id" >> "$GITHUB_OUTPUT"
+          echo "### Testnet contract" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed ExplorerContract id: \`$contract_id\`" >> "$GITHUB_STEP_SUMMARY"

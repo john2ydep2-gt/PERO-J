@@ -15,10 +15,10 @@ function mockFetchUntilAborted(stallWhileParsing = false) {
     if (stallWhileParsing) {
       return Promise.resolve({
         ok: true,
-        json: () => abort(init?.signal),
+        json: () => abort(init?.signal ?? undefined),
       } as unknown as Response);
     }
-    return abort(init?.signal);
+    return abort(init?.signal ?? undefined);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;

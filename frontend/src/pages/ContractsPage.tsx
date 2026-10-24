@@ -73,7 +73,7 @@ export default function ContractsPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontWeight: 600 }}>{c.name}</span>
                     <span style={{ color: "var(--muted)", fontSize: 12, whiteSpace: "nowrap" }}>
-                      {c.eventCount ?? 0} events
+                      {c.event_count ?? 0} events
                     </span>
                   </div>
                   <span style={{ color: "var(--muted)", fontSize: 13 }}>

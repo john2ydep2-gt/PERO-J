@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import pg from "pg";
 import { eventEmitter } from "./events.js";
 
@@ -5,6 +6,8 @@ import { eventEmitter } from "./events.js";
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
 /** @typedef {import('./types.js').VolumeResult} VolumeResult */
 
+const DEFAULT_BACKEND_POOL_SIZE = 25;
+const DEFAULT_INDEXER_POOL_SIZE = 10;
 const DEFAULT_POOL_SIZE = 20;
 const PING_TIMEOUT_MS = 5000;
 
@@ -15,10 +18,18 @@ const PING_TIMEOUT_MS = 5000;
  * @param {string} [envVal=process.env.DATABASE_POOL_SIZE]
  * @returns {number}
  */
-export function getPoolSize(envVal = process.env.DATABASE_POOL_SIZE) {
+export function getPoolSize(
+  envVal = process.env.DATABASE_POOL_SIZE,
+  serviceType = process.env.SERVICE_TYPE
+) {
   if (envVal === undefined || envVal === null || String(envVal).trim() === "") {
+    if (serviceType === "backend") return DEFAULT_BACKEND_POOL_SIZE;
+    if (serviceType === "indexer") return DEFAULT_INDEXER_POOL_SIZE;
     return DEFAULT_POOL_SIZE;
   }
+
+
+
   const str = String(envVal).trim();
   const parsed = Number(str);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
@@ -30,14 +41,42 @@ export function getPoolSize(envVal = process.env.DATABASE_POOL_SIZE) {
   return parsed;
 }
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: getPoolSize(),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
+
+// Error event handler: prevent unexpected idle connection drops from crashing the service
+pool.on("error", (err) => {
+  console.error("Unexpected error on idle database client:", err);
+});
 const MIGRATION_LOCK_ID = 57_056;
 const MAX_PAGE = 200;
+const CHECKPOINT_SERVICE_NAME = "soroban-indexer";
+const EVENT_INSERT_SQL = `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  ON CONFLICT DO NOTHING`;
+
+function eventInsertParams(ev) {
+  return [
+    ev.contract_id,
+    ev.function,
+    ev.ledger,
+    ev.tx_hash,
+    ev.description,
+    JSON.stringify(ev.raw_topics),
+    ev.raw_data,
+    ev.sac_asset ?? null,
+    ev.event_addresses ?? [],
+    ev.onchain_seq ?? null,
+  ];
+}
+
+async function insertEvent(queryable, ev) {
+  await queryable.query(EVENT_INSERT_SQL, eventInsertParams(ev));
+}
 
 function escapeLikePattern(value) {
   return String(value ?? "")
@@ -167,47 +206,47 @@ const migrations = [
   },
   {
     id: 7,
-    name: "create_markets_and_bets_tables",
+    name: "create_oracle_and_markets_tables",
     sql: `
       CREATE TABLE IF NOT EXISTS markets (
-        id          TEXT PRIMARY KEY,
-        question    TEXT NOT NULL,
-        creator     TEXT NOT NULL,
-        status      TEXT DEFAULT 'open',
-        total_volume NUMERIC DEFAULT 0,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
+        id              TEXT PRIMARY KEY,
+        contract_id     TEXT NOT NULL,
+        oracle_state    TEXT NOT NULL DEFAULT 'pending',
+        outcome         TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_markets_created ON markets(created_at, id);
+      CREATE INDEX IF NOT EXISTS idx_markets_contract ON markets(contract_id);
+      CREATE INDEX IF NOT EXISTS idx_markets_oracle_state ON markets(oracle_state);
 
-      CREATE TABLE IF NOT EXISTS bets (
-        id          TEXT PRIMARY KEY,
-        market_id   TEXT NOT NULL,
-        user_address TEXT NOT NULL,
-        amount      NUMERIC NOT NULL,
-        outcome     TEXT NOT NULL,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
+      CREATE TABLE IF NOT EXISTS oracle_submissions (
+        id              BIGSERIAL PRIMARY KEY,
+        market_id       TEXT NOT NULL,
+        submitter       TEXT NOT NULL,
+        outcome         TEXT NOT NULL,
+        ledger          BIGINT NOT NULL,
+        tx_hash         TEXT,
+        timestamp       TIMESTAMPTZ DEFAULT NOW(),
+        status          TEXT NOT NULL DEFAULT 'pending',
+        created_at      TIMESTAMPTZ DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_bets_created ON bets(created_at, id);
-    `,
-  },
-  {
-    id: 8,
-    name: "create_dispute_bonds_table",
-    sql: `
-      CREATE TABLE IF NOT EXISTS dispute_bonds (
-        id             TEXT PRIMARY KEY,
-        dispute_id     TEXT NOT NULL,
-        market_id      TEXT,
-        bond_type      TEXT NOT NULL,
-        depositor      TEXT NOT NULL,
-        amount         NUMERIC NOT NULL,
-        status         TEXT NOT NULL DEFAULT 'deposited',
-        settled_amount NUMERIC DEFAULT 0,
-        created_at     TIMESTAMPTZ DEFAULT NOW(),
-        settled_at     TIMESTAMPTZ
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_market ON oracle_submissions(market_id);
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_status ON oracle_submissions(status);
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_ledger ON oracle_submissions(ledger);
+
+      CREATE TABLE IF NOT EXISTS oracle_disputes (
+        id              BIGSERIAL PRIMARY KEY,
+        submission_id   BIGINT NOT NULL REFERENCES oracle_submissions(id),
+        market_id       TEXT NOT NULL,
+        disputer        TEXT NOT NULL,
+        reason          TEXT,
+        ledger          BIGINT NOT NULL,
+        tx_hash         TEXT,
+        timestamp       TIMESTAMPTZ DEFAULT NOW(),
+        created_at      TIMESTAMPTZ DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_dispute ON dispute_bonds(dispute_id);
-      CREATE INDEX IF NOT EXISTS idx_dispute_bonds_status ON dispute_bonds(status);
+      CREATE INDEX IF NOT EXISTS idx_oracle_disputes_submission ON oracle_disputes(submission_id);
+      CREATE INDEX IF NOT EXISTS idx_oracle_disputes_market ON oracle_disputes(market_id);
     `,
   },
 ];
@@ -223,6 +262,23 @@ process.on("unhandledRejection", async (err) => {
 });
 
 export const db = {
+  /**
+   * Return current database connection pool health metrics.
+   * @returns {{ totalCount: number, idleCount: number, waitingCount: number, max: number, isHealthy: boolean }}
+   */
+  getPoolMetrics() {
+    const max = getPoolSize();
+    const totalCount = pool.totalCount ?? 0;
+    const idleCount = pool.idleCount ?? 0;
+    const waitingCount = pool.waitingCount ?? 0;
+    return {
+      totalCount,
+      idleCount,
+      waitingCount,
+      max,
+      isHealthy: !(waitingCount > 0 && totalCount >= max),
+    };
+  },
   /** Run advisory-locked schema migrations before startup.
    *
    * IMPORTANT: This method acquires a dedicated client from the pool.
@@ -277,6 +333,15 @@ export const db = {
   },
 
   /**
+   * Run an arbitrary parameterised query against the pool.
+   * @param {string} text
+   * @param {any[]} [params]
+   */
+  async query(text, params) {
+    return pool.query(text, params);
+  },
+
+  /**
    * Check if database is reachable.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<boolean>}
@@ -300,32 +365,54 @@ export const db = {
 
   /**
    * Persist a decoded event to the database.
-   * Uses ON CONFLICT DO NOTHING so duplicate events (e.g. from an indexer
-   * restart) are silently skipped.
+  * Skips duplicate event records (e.g. when a backfill resumes after a crash).
    * Uses pool.query — safe to call outside of init().
    *
    * @param {DecodedEvent} ev
    * @returns {Promise<void>}
    */
   async upsertEvent(ev) {
-    await pool.query(
-      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT DO NOTHING`,
-      [
-        ev.contract_id,
-        ev.function,
-        ev.ledger,
-        ev.tx_hash,
-        ev.description,
-        JSON.stringify(ev.raw_topics),
-        ev.raw_data,
-        ev.sac_asset ?? null,
-        ev.event_addresses ?? [],
-        ev.onchain_seq ?? null,
-      ]
-    );
+    await insertEvent(pool, ev);
     eventEmitter.emit("event", ev);
+  },
+
+  /**
+   * Persist all events from a ledger and its checkpoint atomically.
+   * @param {DecodedEvent[]} events
+   * @param {{ sequence: number, hash: string }} checkpoint
+   * @returns {Promise<void>}
+   */
+  async persistLedger(events, { sequence, hash }) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const ev of events) {
+        await insertEvent(client, ev);
+      }
+      await client.query(
+        `INSERT INTO checkpoint_state (service_name, last_ledger_sequence, last_ledger_hash)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (service_name) DO UPDATE SET
+           last_ledger_sequence = EXCLUDED.last_ledger_sequence,
+           last_ledger_hash = EXCLUDED.last_ledger_hash,
+           updated_at = NOW()`,
+        [CHECKPOINT_SERVICE_NAME, sequence, hash]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackErr) {
+        console.error("Failed to roll back ledger transaction:", rollbackErr);
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    for (const ev of events) {
+      eventEmitter.emit("event", ev);
+    }
   },
 
   /**
@@ -791,6 +878,55 @@ export const db = {
   },
 
   /**
+   * Persist an unprocessable ledger event in the dead-letter queue so it is
+   * never lost across restarts or deployments.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {object} entry
+   * @param {number} [entry.ledger_sequence] - Ledger the event came from.
+   * @param {string} [entry.tx_hash]         - Transaction hash (max 64 chars).
+   * @param {string} [entry.topic]           - Event topic (max 128 chars).
+   * @param {*}      [entry.payload]         - Raw event payload (stored as JSONB).
+   * @param {string} [entry.error_message]   - Why the event could not be processed.
+   * @returns {Promise<number>} The id of the inserted dlq_events row.
+   */
+  async insertDlqEvent({ ledger_sequence, tx_hash, topic, payload, error_message } = {}) {
+    const { rows } = await pool.query(
+      `INSERT INTO dlq_events (ledger_sequence, tx_hash, topic, payload, error_message)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id`,
+      [
+        ledger_sequence ?? null,
+        tx_hash ?? null,
+        topic ?? null,
+        payload === undefined ? null : JSON.stringify(payload),
+        error_message ?? null,
+      ]
+    );
+    return rows[0].id;
+  },
+
+  /**
+   * Record a retry attempt for a dead-lettered event by incrementing
+   * retry_count and refreshing created_at.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {number} id - The dlq_events row id.
+   * @returns {Promise<object|null>} The updated row, or null if not found.
+   */
+  async retryDlqEvent(id) {
+    const { rows } = await pool.query(
+      `UPDATE dlq_events
+       SET retry_count = COALESCE(retry_count, 0) + 1,
+           created_at  = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+    return rows[0] ?? null;
+  },
+
+  /**
    * Read the persisted indexer cursor from the indexer_state table.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<number|null>} The last successfully indexed ledger, or null.
@@ -811,6 +947,25 @@ export const db = {
   },
 
   /**
+   * Read the last atomically committed ledger checkpoint.
+   * @returns {Promise<{ last_ledger_sequence: number, last_ledger_hash: string|null }|null>}
+   */
+  async getCheckpoint() {
+    const { rows } = await pool.query(
+      "SELECT last_ledger_sequence, last_ledger_hash FROM checkpoint_state WHERE service_name = $1",
+      [CHECKPOINT_SERVICE_NAME]
+    );
+    if (!rows.length) {
+      return null;
+    }
+    const sequence = Number(rows[0].last_ledger_sequence);
+    if (!Number.isSafeInteger(sequence)) {
+      throw new Error(`Invalid checkpoint ledger sequence: ${rows[0].last_ledger_sequence}`);
+    }
+    return { last_ledger_sequence: sequence, last_ledger_hash: rows[0].last_ledger_hash };
+  },
+
+  /**
    * Persist the indexer cursor so the process can resume from this ledger
    * after a restart.
    * Uses pool.query — safe to call outside of init().
@@ -826,173 +981,144 @@ export const db = {
     );
   },
 
+  // ── Oracle & Markets ────────────────────────────────────────────────────────
+
   /**
-   * Get a market by ID.
+   * Insert or update a market record.
+   * Uses pool.query — safe to call outside of init().
    *
-   * @param {string} id
-   * @returns {Promise<any|null>}
+   * @param {object} market
+   * @param {string} market.id - Market identifier
+   * @param {string} market.contract_id - Contract address
+   * @param {string} market.oracle_state - Oracle state (pending, submitted, disputed, finalized)
+   * @param {string} [market.outcome] - Optional outcome value
+   * @returns {Promise<void>}
    */
-  async getMarket(id) {
-    if (!id) return null;
-    try {
-      const { rows } = await pool.query("SELECT * FROM markets WHERE id = $1", [id]);
-      return rows[0] || null;
-    } catch {
-      return null;
-    }
+  async upsertMarket(market) {
+    await pool.query(
+      `INSERT INTO markets (id, contract_id, oracle_state, outcome, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET 
+         oracle_state = $3,
+         outcome = $4,
+         updated_at = NOW()`,
+      [market.id, market.contract_id, market.oracle_state, market.outcome ?? null]
+    );
   },
 
   /**
-   * Calculate or retrieve odds for a given market ID based on placed bets.
+   * Get market by ID.
+   * Uses pool.query — safe to call outside of init().
    *
    * @param {string} marketId
-   * @returns {Promise<Record<string, number>|null>}
+   * @returns {Promise<object|null>}
    */
-  async getMarketOdds(marketId) {
-    if (!marketId) return null;
-    try {
-      const { rows } = await pool.query(
-        "SELECT outcome, SUM(amount) AS pool FROM bets WHERE market_id = $1 GROUP BY outcome",
-        [marketId]
-      );
-      if (!rows.length) return null;
-      let total = 0;
-      const outcomePools = {};
-      for (const row of rows) {
-        const poolVal = parseFloat(row.pool) || 0;
-        outcomePools[row.outcome] = poolVal;
-        total += poolVal;
-      }
-      const odds = {};
-      for (const [outcome, poolVal] of Object.entries(outcomePools)) {
-        odds[outcome] = poolVal > 0 ? parseFloat((total / poolVal).toFixed(4)) : 1.0;
-      }
-      return odds;
-    } catch {
-      return null;
-    }
+  async getMarket(marketId) {
+    const { rows } = await pool.query("SELECT * FROM markets WHERE id = $1", [marketId]);
+    return rows[0] ?? null;
   },
 
   /**
-   * Record a deposited dispute bond (submitter or challenger).
+   * Insert an oracle submission record.
+   * Uses pool.query — safe to call outside of init().
    *
-   * @param {object} bond
-   * @param {string} bond.id
-   * @param {string} bond.dispute_id
-   * @param {string} [bond.market_id]
-   * @param {string} bond.bond_type - 'submitter' or 'challenger'
-   * @param {string} bond.depositor
-   * @param {number|string} bond.amount
-   * @param {string} [bond.status='deposited']
-   * @returns {Promise<any>}
+   * @param {object} submission
+   * @param {string} submission.market_id - Market identifier
+   * @param {string} submission.submitter - Submitter address
+   * @param {string} submission.outcome - Submitted outcome
+   * @param {number} submission.ledger - Ledger number
+   * @param {string} [submission.tx_hash] - Transaction hash
+   * @param {string} [submission.status] - Status (pending, disputed, finalized)
+   * @returns {Promise<number>} The inserted submission ID
    */
-  async recordDisputeBond({
-    id,
-    dispute_id,
-    market_id = null,
-    bond_type,
-    depositor,
-    amount,
-    status = "deposited",
-  }) {
+  async insertOracleSubmission(submission) {
     const { rows } = await pool.query(
-      `INSERT INTO dispute_bonds (id, dispute_id, market_id, bond_type, depositor, amount, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [id, dispute_id, market_id, bond_type, depositor, amount, status]
+      `INSERT INTO oracle_submissions (market_id, submitter, outcome, ledger, tx_hash, status, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id`,
+      [
+        submission.market_id,
+        submission.submitter,
+        submission.outcome,
+        submission.ledger,
+        submission.tx_hash ?? null,
+        submission.status ?? "pending",
+      ]
     );
-    return rows[0];
+    return rows[0].id;
   },
 
   /**
-   * Settle a dispute bond (returned or slashed).
+   * Update oracle submission status.
+   * Uses pool.query — safe to call outside of init().
    *
-   * @param {object} params
-   * @param {string} params.id
-   * @param {string} [params.status='settled'] - 'returned', 'slashed', or 'settled'
-   * @param {number|string} params.settled_amount
-   * @returns {Promise<any>}
+   * @param {number} submissionId
+   * @param {string} status
+   * @returns {Promise<void>}
    */
-  async settleDisputeBond({ id, status = "settled", settled_amount }) {
+  async updateOracleSubmissionStatus(submissionId, status) {
+    await pool.query(
+      `UPDATE oracle_submissions SET status = $1 WHERE id = $2`,
+      [status, submissionId]
+    );
+  },
+
+  /**
+   * Get the most recent oracle submission for a market.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {string} marketId
+   * @returns {Promise<object|null>}
+   */
+  async getLatestOracleSubmission(marketId) {
     const { rows } = await pool.query(
-      `UPDATE dispute_bonds
-       SET status = $2, settled_amount = $3, settled_at = NOW()
-       WHERE id = $1
-       RETURNING *`,
-      [id, status, settled_amount]
+      `SELECT * FROM oracle_submissions 
+       WHERE market_id = $1 
+       ORDER BY ledger DESC, id DESC 
+       LIMIT 1`,
+      [marketId]
     );
-    return rows[0] || null;
+    return rows[0] ?? null;
   },
 
   /**
-   * Get dispute bonds with optional filters.
+   * Insert an oracle dispute record.
+   * Uses pool.query — safe to call outside of init().
    *
-   * @param {object} [filters]
-   * @param {string} [filters.dispute_id]
-   * @param {string} [filters.status]
-   * @returns {Promise<any[]>}
+   * @param {object} dispute
+   * @param {number} dispute.submission_id - Submission being disputed
+   * @param {string} dispute.market_id - Market identifier
+   * @param {string} dispute.disputer - Disputer address
+   * @param {string} [dispute.reason] - Dispute reason
+   * @param {number} dispute.ledger - Ledger number
+   * @param {string} [dispute.tx_hash] - Transaction hash
+   * @returns {Promise<number>} The inserted dispute ID
    */
-  async getDisputeBonds({ dispute_id = null, status = null } = {}) {
-    const conditions = [];
-    const params = [];
-    if (dispute_id) {
-      params.push(dispute_id);
-      conditions.push(`dispute_id = $${params.length}`);
-    }
-    if (status) {
-      params.push(status);
-      conditions.push(`status = $${params.length}`);
-    }
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    try {
-      const { rows } = await pool.query(
-        `SELECT * FROM dispute_bonds ${where} ORDER BY created_at DESC`,
-        params
-      );
-      return rows;
-    } catch {
-      return [];
-    }
+  async insertOracleDispute(dispute) {
+    const { rows } = await pool.query(
+      `INSERT INTO oracle_disputes (submission_id, market_id, disputer, reason, ledger, tx_hash, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id`,
+      [
+        dispute.submission_id,
+        dispute.market_id,
+        dispute.disputer,
+        dispute.reason ?? null,
+        dispute.ledger,
+        dispute.tx_hash ?? null,
+      ]
+    );
+    return rows[0].id;
   },
 
   /**
-   * Retrieve aggregate bond accounting across disputes:
-   * - total_bonds_deposited: sum of all deposited amounts
-   * - total_bonds_settled: sum of all settled amounts
-   * - expected_escrow_holdings: total_bonds_deposited - total_bonds_settled
-   * - active_disputes: count of open disputes with active bonds
-   *
-   * @returns {Promise<{ total_bonds_deposited: number, total_bonds_settled: number, expected_escrow_holdings: number, active_disputes: number }>}
+   * Execute a raw query (for testing or advanced use).
+   * @param {string} text
+   * @param {Array} [params]
+   * @returns {Promise<object>}
    */
-  async getBondAccounting() {
-    try {
-      const { rows } = await pool.query(`
-        SELECT
-          COALESCE(SUM(amount), 0) AS total_deposited,
-          COALESCE(SUM(settled_amount), 0) AS total_settled,
-          COUNT(DISTINCT CASE WHEN status = 'deposited' THEN dispute_id END) AS active_disputes
-        FROM dispute_bonds
-      `);
-      const row = rows[0] || {};
-      const totalDeposited = parseFloat(row.total_deposited) || 0;
-      const totalSettled = parseFloat(row.total_settled) || 0;
-      const expectedHoldings = totalDeposited - totalSettled;
-      const activeDisputes = parseInt(row.active_disputes, 10) || 0;
-
-      return {
-        total_bonds_deposited: totalDeposited,
-        total_bonds_settled: totalSettled,
-        expected_escrow_holdings: expectedHoldings,
-        active_disputes: activeDisputes,
-      };
-    } catch (err) {
-      return {
-        total_bonds_deposited: 0,
-        total_bonds_settled: 0,
-        expected_escrow_holdings: 0,
-        active_disputes: 0,
-      };
-    }
+  async query(text, params) {
+    return pool.query(text, params);
   },
 };
 

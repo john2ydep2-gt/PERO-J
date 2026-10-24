@@ -1,0 +1,10 @@
+# Dev image for the indexer — installs all deps (incl. dev) and runs the
+# `node --watch` dev script for hot-reload. Used by docker-compose.yml.
+FROM node:20-alpine
+RUN apk add --no-cache curl
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3001
+CMD ["npm", "run", "dev"]
