@@ -234,10 +234,30 @@ The `update` topic lets the indexer invalidate its ABI cache without polling sto
 | `GET /api/wallet/:address` | Wallet event history |
 | `GET /api/tokens/:id/volume?decimals=` | 24-hour rolling transfer volume for a SEP-41 token. Optional `decimals` query param (integer 0–38) overrides the on-chain metadata lookup. |
 | `GET /api/v1/oracle/disputes` | Active Oracle disputes with asserted outcomes, disputer addresses, council votes and tallies, deadline, and remaining voting time. Requires `ORACLE_CONTRACT_ID`; returns HTTP 503 if it is unset. |
+| `POST /api/v1/oracle/resolutions/:submissionId/evidence` | Store immutable raw source evidence for a resolution (requires `API_ADMIN_KEY`). |
+| `GET /api/v1/oracle/resolutions/:submissionId/evidence` | Publicly retrieve the evidence bundle and its SHA-256 hash for verification. |
 
 The disputes endpoint reads the Oracle contract on each request. Each dispute
 includes `affirmative_votes`, `negative_votes`, the individual `votes`, an ISO
 8601 `deadline`, and `remaining_seconds` / human-readable `remaining_time`.
+
+The resolution evidence write endpoint is the ingestion hook for the automated
+resolution worker. It accepts `response_payload` (the exact raw response body
+as a string), `response_status` (100–599), `response_headers` (string-valued
+object), and `resolved_at` (timestamp). Each submission ID can be recorded
+once; retries with an identical evidence bundle return the original record,
+while different evidence for an existing submission returns HTTP 409. The
+database rejects updates, deletes, and truncation of audit records.
+
+The public endpoint returns `submission_id`, `response_payload`,
+`response_status`, `response_headers`, `resolved_at`, `recorded_at`, and
+`evidence_hash`. The hash is SHA-256 over the UTF-8 bytes of the JSON
+serialization of those evidence fields except `recorded_at` and
+`evidence_hash`, in this order: `submission_id`, `response_payload`,
+`response_status`, `response_headers`, `resolved_at`. Header keys are sorted
+in ascending ASCII order and represented in the hash input as an array of
+`[name, value]` pairs; the timestamp is normalized to ISO 8601 before hashing.
+This lets clients independently reproduce the digest.
 
 ### Oracle council inactivity alerts
 

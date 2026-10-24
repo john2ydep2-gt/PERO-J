@@ -96,6 +96,51 @@ export function validateContractPayload(body) {
   return null;
 }
 
+function validateResolutionEvidencePayload(body) {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return "Request body must be a JSON object";
+  }
+
+  const { response_payload, response_status, response_headers, resolved_at } = body;
+  if (typeof response_payload !== "string") {
+    return "response_payload must be a string";
+  }
+  if (
+    !Number.isInteger(response_status) ||
+    response_status < 100 ||
+    response_status > 599
+  ) {
+    return "response_status must be an integer between 100 and 599";
+  }
+  if (
+    response_headers === null ||
+    typeof response_headers !== "object" ||
+    Array.isArray(response_headers) ||
+    Object.entries(response_headers).some(
+      ([name, value]) =>
+        !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) ||
+        typeof value !== "string",
+    )
+  ) {
+    return "response_headers must be an object of string values";
+  }
+  if (
+    typeof resolved_at !== "string" ||
+    !Number.isFinite(Date.parse(resolved_at))
+  ) {
+    return "resolved_at must be a valid timestamp";
+  }
+
+  return null;
+}
+
+function normalizeSubmissionId(value) {
+  if (!/^\d+$/.test(value)) {
+    return null;
+  }
+  return value.replace(/^0+(?=\d)/, "");
+}
+
 export function createApp() {
   marketCacheManager.start();
   const app = express();
@@ -224,6 +269,58 @@ export function createApp() {
       const rows = await oracleDisputes.fetchActive();
       res.setHeader("Cache-Control", "no-store");
       return res.json({ disputes: formatOracleDisputes(rows) });
+    })
+  );
+
+  // POST /api/v1/oracle/resolutions/:submissionId/evidence — record source evidence
+  app.post(
+    "/api/v1/oracle/resolutions/:submissionId/evidence",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const submissionId = normalizeSubmissionId(req.params.submissionId);
+      if (submissionId === null) {
+        return res.status(400).json({ error: "submissionId must be a non-negative integer" });
+      }
+
+      const validationError = validateResolutionEvidencePayload(req.body);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+
+      try {
+        const record = await db.createResolutionAuditLog({
+          submission_id: submissionId,
+          response_payload: req.body.response_payload,
+          response_status: req.body.response_status,
+          response_headers: req.body.response_headers,
+          resolved_at: new Date(req.body.resolved_at).toISOString(),
+        });
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(201).json(record);
+      } catch (error) {
+        if (error.code === "RESOLUTION_AUDIT_CONFLICT") {
+          return res.status(409).json({ error: error.message });
+        }
+        throw error;
+      }
+    })
+  );
+
+  // GET /api/v1/oracle/resolutions/:submissionId/evidence — publicly verify evidence
+  app.get(
+    "/api/v1/oracle/resolutions/:submissionId/evidence",
+    asyncHandler(async (req, res) => {
+      const submissionId = normalizeSubmissionId(req.params.submissionId);
+      if (submissionId === null) {
+        return res.status(400).json({ error: "submissionId must be a non-negative integer" });
+      }
+
+      const record = await db.getResolutionAuditLog(submissionId);
+      if (!record) {
+        return res.status(404).json({ error: "Resolution evidence not found" });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.json(record);
     })
   );
 

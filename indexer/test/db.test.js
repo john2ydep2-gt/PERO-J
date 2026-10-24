@@ -11,6 +11,7 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import pg from "pg";
 
 // ── in-memory SQL mock ────────────────────────────────────────────────────────
@@ -154,6 +155,115 @@ describe("db.init() migrations", () => {
       ),
       "expected migration 6 to be recorded"
     );
+  });
+});
+
+describe("db.createResolutionAuditLog() / db.getResolutionAuditLog()", () => {
+  beforeEach(() => resetMock());
+
+  const evidence = {
+    submission_id: "42",
+    response_payload: '{"outcome":"resolved"}',
+    response_status: 200,
+    response_headers: {
+      "2": "two",
+      "10": "ten",
+      "x-source": "oracle",
+      "content-type": "application/json",
+    },
+    resolved_at: "2026-10-20T15:04:05.000Z",
+  };
+
+  it("stores a SHA-256 hash of a deterministically ordered evidence bundle", async () => {
+    _nextRow = { ...evidence, evidence_hash: "returned-hash" };
+    await db.createResolutionAuditLog(evidence);
+
+    const { sql, params } = lastCall();
+    const bundle = {
+      submission_id: "42",
+      response_payload: '{"outcome":"resolved"}',
+      response_status: 200,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const expectedHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    assert.match(sql, /INSERT INTO resolution_audit_logs/);
+    assert.match(sql, /ON CONFLICT \(submission_id\) DO NOTHING/);
+    assert.equal(params[0], evidence.submission_id);
+    assert.equal(params[1], evidence.response_payload);
+    assert.equal(params[2], evidence.response_status);
+    assert.equal(
+      params[3],
+      JSON.stringify({
+        "2": "two",
+        "10": "ten",
+        "content-type": "application/json",
+        "x-source": "oracle",
+      }),
+    );
+    assert.equal(params[4], evidence.resolved_at);
+    assert.equal(params[5], expectedHash);
+  });
+
+  it("fetches an audit record by submission id", async () => {
+    const record = { submission_id: "42", evidence_hash: "a".repeat(64) };
+    _nextRow = record;
+
+    assert.deepEqual(await db.getResolutionAuditLog("42"), record);
+    assert.match(lastCall().sql, /FROM resolution_audit_logs/);
+    assert.deepEqual(lastCall().params, ["42"]);
+  });
+
+  it("returns an identical record on retry and rejects conflicting evidence", async () => {
+    const originalGet = db.getResolutionAuditLog;
+    const canonicalHeaders = {
+      "2": "two",
+      "10": "ten",
+      "content-type": "application/json",
+      "x-source": "oracle",
+    };
+    const bundle = {
+      submission_id: "42",
+      response_payload: evidence.response_payload,
+      response_status: evidence.response_status,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const evidenceHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    const originalRecord = {
+      submission_id: "42",
+      response_headers: canonicalHeaders,
+      evidence_hash: evidenceHash,
+    };
+
+    try {
+      db.getResolutionAuditLog = async () => originalRecord;
+      assert.deepEqual(await db.createResolutionAuditLog(evidence), originalRecord);
+
+      db.getResolutionAuditLog = async () => ({
+        ...originalRecord,
+        evidence_hash: "f".repeat(64),
+      });
+      await assert.rejects(db.createResolutionAuditLog(evidence), {
+        code: "RESOLUTION_AUDIT_CONFLICT",
+      });
+    } finally {
+      db.getResolutionAuditLog = originalGet;
+    }
   });
 });
 
@@ -692,4 +802,3 @@ describe("db.getEvents() full-text search (#321)", () => {
     );
   });
 });
-
