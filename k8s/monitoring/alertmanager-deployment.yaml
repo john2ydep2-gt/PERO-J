@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: "http://localhost:5000/webhook/slack"
+
+    route:
+      group_by: ["alertname", "cluster", "service", "severity"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: "slack-notifications"
+      routes:
+        - match:
+            severity: critical
+          receiver: "critical-pagerduty"
+          continue: true
+        - match:
+            team: operations
+          receiver: "operations-alerts"
+          continue: true
+        - match:
+            severity: high
+          receiver: "discord-notifications"
+          continue: true
+
+    receivers:
+      - name: "slack-notifications"
+        slack_configs:
+          - channel: "#alerts-monitoring"
+            send_resolved: true
+            api_url: "http://localhost:5000/webhook/slack"
+
+      - name: "critical-pagerduty"
+        pagerduty_configs:
+          - routing_key: "pagerduty_integration_key_placeholder"
+            send_resolved: true
+
+      - name: "discord-notifications"
+        webhook_configs:
+          - url: "http://localhost:5000/webhook/discord"
+            send_resolved: true
+
+      - name: "operations-alerts"
+        slack_configs:
+          - channel: "#ops-alerts"
+            send_resolved: true
+            api_url: "http://localhost:5000/webhook/slack"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/alertmanager
+            - name: storage-volume
+              mountPath: /alertmanager
+      volumes:
+        - name: config-volume
+          configMap:
+            name: alertmanager-config
+        - name: storage-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - protocol: TCP
+      port: 9093
+      targetPort: 9093

@@ -1,0 +1,73 @@
+global:
+  resolve_timeout: 5m
+  # Set via environment or webhook proxy
+  slack_api_url: "http://localhost:5000/webhook/slack"
+
+route:
+  group_by: ["alertname", "cluster", "service", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "slack-notifications"
+  routes:
+    - match:
+        severity: critical
+      receiver: "critical-pagerduty"
+      continue: true
+    - match:
+        team: operations
+      receiver: "operations-alerts"
+      continue: true
+    - match:
+        severity: high
+      receiver: "discord-notifications"
+      continue: true
+
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "high"
+    equal: ["alertname", "service"]
+
+receivers:
+  - name: "slack-notifications"
+    slack_configs:
+      - channel: "#alerts-monitoring"
+        send_resolved: true
+        api_url: "http://localhost:5000/webhook/slack"
+        title: "[{{ .Status | toUpper }}] {{ .CommonAnnotations.summary }}"
+        text: >-
+          {{ range .Alerts }}
+            *Alert:* {{ .Annotations.summary }} - `{{ .Labels.severity }}`
+            *Description:* {{ .Annotations.description }}
+            *Service:* {{ .Labels.service }}
+            *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+
+  - name: "critical-pagerduty"
+    pagerduty_configs:
+      - routing_key: "pagerduty_integration_key_placeholder"
+        send_resolved: true
+        severity: '{{ if eq .CommonLabels.severity "critical" }}critical{{ else }}error{{ end }}'
+        description: '{{ .CommonAnnotations.summary }}: {{ .CommonAnnotations.description }}'
+        client: "Prometheus Alertmanager"
+        client_url: '{{ .CommonAnnotations.runbook_url }}'
+
+  - name: "discord-notifications"
+    webhook_configs:
+      - url: "http://localhost:5000/webhook/discord"
+        send_resolved: true
+
+  - name: "operations-alerts"
+    slack_configs:
+      - channel: "#ops-alerts"
+        send_resolved: true
+        api_url: "http://localhost:5000/webhook/slack"
+        title: "[OPS ALERT] {{ .CommonAnnotations.summary }}"
+        text: >-
+          {{ range .Alerts }}
+            *Service:* {{ .Labels.service }}
+            *Details:* {{ .Annotations.description }}
+            *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
