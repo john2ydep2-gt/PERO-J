@@ -1,0 +1,16 @@
+# Prometheus data source used by all PERO-J dashboards.
+# The uid "prometheus" matches the default value of the dashboards'
+# $datasource template variable.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: ${PROMETHEUS_URL}
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST

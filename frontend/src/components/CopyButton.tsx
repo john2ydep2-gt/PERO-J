@@ -22,8 +22,10 @@ export default function CopyButton({ value, size = "normal", ariaLabel }: CopyBu
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       aria-label={ariaLabel}
+      aria-live="polite"
       style={{
         padding: size === "small" ? "4px 8px" : "6px 12px",
         fontSize: size === "small" ? "12px" : "14px",
@@ -34,7 +36,8 @@ export default function CopyButton({ value, size = "normal", ariaLabel }: CopyBu
       }}
       title="Copy to clipboard"
     >
-      {copied ? "✓ Copied!" : "📋 Copy"}
+      <span aria-hidden="true">{copied ? "✓" : "📋"}</span>{" "}
+      {copied ? "Copied!" : "Copy"}
     </button>
   );
 }

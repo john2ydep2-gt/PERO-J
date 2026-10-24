@@ -11,6 +11,7 @@
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import pg from "pg";
 
 // ── in-memory SQL mock ────────────────────────────────────────────────────────
@@ -19,12 +20,14 @@ const _calls = []; // { sql, params }[]
 const _appliedMigrations = new Set();
 let _nextRow = null; // override row returned by the next query
 let _queryError = null; // if set, next query throws this error
+let _failQuery = null;
 
 function resetMock() {
   _calls.length = 0;
   _appliedMigrations.clear();
   _nextRow = null;
   _queryError = null;
+  _failQuery = null;
 }
 
 function lastCall() {
@@ -34,6 +37,9 @@ function lastCall() {
 // Fake client returned by pool.connect()
 const fakeClient = {
   query: async (sql, params) => {
+    if (_failQuery?.(sql)) {
+      throw new Error("injected query failure");
+    }
     if (_queryError) {
       const err = _queryError;
       _queryError = null;
@@ -128,6 +134,10 @@ describe("db.init() migrations", () => {
       call.sql.includes("ALTER TABLE events ADD COLUMN IF NOT EXISTS sac_asset TEXT")
     );
     assert.ok(migrationSql, "expected a migration to add sac_asset idempotently");
+    assert.ok(
+      _calls.some((call) => call.sql.includes("CREATE TABLE IF NOT EXISTS checkpoint_state")),
+      "expected the checkpoint state migration to run"
+    );
   });
 
   it("adds sac_asset when earlier migrations are already recorded", async () => {
@@ -145,6 +155,115 @@ describe("db.init() migrations", () => {
       ),
       "expected migration 6 to be recorded"
     );
+  });
+});
+
+describe("db.createResolutionAuditLog() / db.getResolutionAuditLog()", () => {
+  beforeEach(() => resetMock());
+
+  const evidence = {
+    submission_id: "42",
+    response_payload: '{"outcome":"resolved"}',
+    response_status: 200,
+    response_headers: {
+      "2": "two",
+      "10": "ten",
+      "x-source": "oracle",
+      "content-type": "application/json",
+    },
+    resolved_at: "2026-10-20T15:04:05.000Z",
+  };
+
+  it("stores a SHA-256 hash of a deterministically ordered evidence bundle", async () => {
+    _nextRow = { ...evidence, evidence_hash: "returned-hash" };
+    await db.createResolutionAuditLog(evidence);
+
+    const { sql, params } = lastCall();
+    const bundle = {
+      submission_id: "42",
+      response_payload: '{"outcome":"resolved"}',
+      response_status: 200,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const expectedHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    assert.match(sql, /INSERT INTO resolution_audit_logs/);
+    assert.match(sql, /ON CONFLICT \(submission_id\) DO NOTHING/);
+    assert.equal(params[0], evidence.submission_id);
+    assert.equal(params[1], evidence.response_payload);
+    assert.equal(params[2], evidence.response_status);
+    assert.equal(
+      params[3],
+      JSON.stringify({
+        "2": "two",
+        "10": "ten",
+        "content-type": "application/json",
+        "x-source": "oracle",
+      }),
+    );
+    assert.equal(params[4], evidence.resolved_at);
+    assert.equal(params[5], expectedHash);
+  });
+
+  it("fetches an audit record by submission id", async () => {
+    const record = { submission_id: "42", evidence_hash: "a".repeat(64) };
+    _nextRow = record;
+
+    assert.deepEqual(await db.getResolutionAuditLog("42"), record);
+    assert.match(lastCall().sql, /FROM resolution_audit_logs/);
+    assert.deepEqual(lastCall().params, ["42"]);
+  });
+
+  it("returns an identical record on retry and rejects conflicting evidence", async () => {
+    const originalGet = db.getResolutionAuditLog;
+    const canonicalHeaders = {
+      "2": "two",
+      "10": "ten",
+      "content-type": "application/json",
+      "x-source": "oracle",
+    };
+    const bundle = {
+      submission_id: "42",
+      response_payload: evidence.response_payload,
+      response_status: evidence.response_status,
+      response_headers: [
+        ["10", "ten"],
+        ["2", "two"],
+        ["content-type", "application/json"],
+        ["x-source", "oracle"],
+      ],
+      resolved_at: evidence.resolved_at,
+    };
+    const evidenceHash = createHash("sha256")
+      .update(JSON.stringify(bundle))
+      .digest("hex");
+    const originalRecord = {
+      submission_id: "42",
+      response_headers: canonicalHeaders,
+      evidence_hash: evidenceHash,
+    };
+
+    try {
+      db.getResolutionAuditLog = async () => originalRecord;
+      assert.deepEqual(await db.createResolutionAuditLog(evidence), originalRecord);
+
+      db.getResolutionAuditLog = async () => ({
+        ...originalRecord,
+        evidence_hash: "f".repeat(64),
+      });
+      await assert.rejects(db.createResolutionAuditLog(evidence), {
+        code: "RESOLUTION_AUDIT_CONFLICT",
+      });
+    } finally {
+      db.getResolutionAuditLog = originalGet;
+    }
   });
 });
 
@@ -229,6 +348,32 @@ describe("db.upsertEvent()", () => {
     const { sql, params } = lastCall();
     assert.ok(sql.includes("sac_asset"), "expected sac_asset column in INSERT");
     assert.equal(params[7], "USDC");
+  });
+
+  it("writes ledger events and checkpoint in one transaction", async () => {
+    await db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" });
+
+    const statements = _calls.map((call) => call.sql.trim());
+    assert.equal(statements[0], "BEGIN");
+    assert.ok(statements[1].startsWith("INSERT INTO events"));
+    assert.ok(statements[2].startsWith("INSERT INTO checkpoint_state"));
+    assert.equal(statements[3], "COMMIT");
+    const checkpointCall = _calls.find((call) =>
+      call.sql.startsWith("INSERT INTO checkpoint_state")
+    );
+    assert.deepEqual(checkpointCall.params, ["soroban-indexer", 1234, "ledger-hash"]);
+  });
+
+  it("rolls back ledger events when checkpoint persistence fails", async () => {
+    _failQuery = (sql) => sql.includes("INSERT INTO checkpoint_state");
+
+    await assert.rejects(
+      db.persistLedger([sampleEvent], { sequence: 1234, hash: "ledger-hash" }),
+      /injected query failure/
+    );
+
+    assert.ok(_calls.some((call) => call.sql.trim() === "ROLLBACK"));
+    assert.ok(!_calls.some((call) => call.sql.trim() === "COMMIT"));
   });
 });
 
@@ -367,6 +512,16 @@ describe("db.getCursor() / db.setCursor()", () => {
     }
   });
 
+  it("getCheckpoint returns the persisted sequence and hash", async () => {
+    _nextRow = { last_ledger_sequence: "5000000", last_ledger_hash: "ledger-hash" };
+    const result = await db.getCheckpoint();
+    assert.deepEqual(result, {
+      last_ledger_sequence: 5000000,
+      last_ledger_hash: "ledger-hash",
+    });
+    assert.deepEqual(lastCall().params, ["soroban-indexer"]);
+  });
+
   it("setCursor executes an INSERT ... ON CONFLICT query", async () => {
     await db.setCursor(4999999);
     const { sql, params } = lastCall();
@@ -432,15 +587,16 @@ describe("db.getLeaderboard()", () => {
     assert.equal(params[params.length - 1], 50);
   });
 
-  it("keeps unregistered contracts by falling back to the contract id as the name", async () => {
+  it("reads from the mv_leaderboard_ranks materialized view", async () => {
     await db.getLeaderboard(10);
     const { sql } = lastCall();
-    assert.match(sql, /LEFT JOIN/i, "expected a left join so events without contract metadata are kept");
-    assert.match(
-      sql,
-      /COALESCE\(c\.name, e\.contract_id\)/i,
-      "expected a fallback name when the contract metadata is missing"
-    );
+    assert.match(sql, /FROM mv_leaderboard_ranks/i);
+    assert.doesNotMatch(sql, /GROUP BY/i);
+  });
+
+  it("refreshLeaderboard() refreshes the view concurrently", async () => {
+    await db.refreshLeaderboard();
+    assert.match(lastCall().sql, /REFRESH MATERIALIZED VIEW CONCURRENTLY mv_leaderboard_ranks/i);
   });
 });
 
@@ -646,4 +802,3 @@ describe("db.getEvents() full-text search (#321)", () => {
     );
   });
 });
-

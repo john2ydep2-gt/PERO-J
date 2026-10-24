@@ -19,6 +19,77 @@ function isValidStellarAddress(address) {
   return STRKEY_BASE32.test(address);
 }
 
+/**
+ * @openapi
+ * /api/wallet/{address}:
+ *   get:
+ *     summary: Get wallet by Stellar address
+ *     description: >
+ *       Retrieves the wallet record for the given Stellar address.
+ *       The address must be a valid Stellar Strkey: 1 version byte
+ *       (`G` for Ed25519 public keys, `C` for contract IDs) followed by
+ *       32 payload bytes and 2 CRC16 bytes, encoded in base32 for a total
+ *       of 56 characters (e.g. `G...` or `C...`).
+ *     tags:
+ *       - Wallet
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         description: >
+ *           Stellar Strkey address. Must be 56 characters, start with `G`
+ *           (Ed25519 public key) or `C` (contract ID), and use base32
+ *           characters `A-Z` and `2-7`.
+ *         schema:
+ *           type: string
+ *           pattern: '^[GC][A-Z2-7]{55}$'
+ *           minLength: 56
+ *           maxLength: 56
+ *           example: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+ *     responses:
+ *       200:
+ *         description: Wallet found.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 address:
+ *                   type: string
+ *                   description: The Stellar address of the wallet.
+ *                   example: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
+ *               additionalProperties: true
+ *       400:
+ *         description: Invalid Stellar address.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Invalid Stellar address
+ *       404:
+ *         description: Wallet not found.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Wallet not found
+ *       500:
+ *         description: Internal server error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Internal server error
+ */
 // GET /api/wallet/:address
 router.get('/:address', async (req, res) => {
   const { address } = req.params;

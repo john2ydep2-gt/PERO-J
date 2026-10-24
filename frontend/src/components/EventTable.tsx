@@ -16,7 +16,7 @@ export default function EventTable({
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
   if (!events.length) {
     return (
-      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+      <div style={{ textAlign: "center", padding: "40px 20px" }} role="status">
         <svg
           width="64"
           height="64"
@@ -27,6 +27,8 @@ export default function EventTable({
           strokeLinecap="round"
           strokeLinejoin="round"
           style={{ marginBottom: 16 }}
+          aria-hidden="true"
+          focusable="false"
         >
           <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
           <path d="M3.27 6.96 12 12.01l8.73-5.05" />
@@ -45,12 +47,13 @@ export default function EventTable({
   return (
     <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", maxWidth: "100%" }}>
       <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse" }}>
+        <caption className="sr-only">Decoded contract events</caption>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>
-            <th style={th}>Seq</th>
-            <th style={th}>Ledger</th>
-            <th style={th}>Function</th>
-            <th style={th}>Description</th>
+            <th scope="col" style={th}>Seq</th>
+            <th scope="col" style={th}>Ledger</th>
+            <th scope="col" style={th}>Function</th>
+            <th scope="col" style={th}>Description</th>
           </tr>
         </thead>
         <tbody>
@@ -61,7 +64,9 @@ export default function EventTable({
               <React.Fragment key={ev.seq}>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={td}>
-                    <Link to={`/event/${ev.seq}`}>#{ev.seq}</Link>
+                    <Link to={`/event/${ev.seq}`} aria-label={`View event ${ev.seq}`}>
+                      #{ev.seq}
+                    </Link>
                   </td>
                   <td style={td}>{ev.ledger.toLocaleString()}</td>
                   <td style={td}>
@@ -83,6 +88,7 @@ export default function EventTable({
                       <button
                         type="button"
                         aria-expanded={isExpanded}
+                        aria-controls={`event-desc-${ev.seq}`}
                         aria-label={isExpanded ? "Collapse description" : "Expand description"}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -100,13 +106,16 @@ export default function EventTable({
                           lineHeight: 1,
                         }}
                       >
-                        {isExpanded ? "▲" : "▼"}
+                        <span aria-hidden="true">{isExpanded ? "▲" : "▼"}</span>
                       </button>
                     )}
                   </td>
                 </tr>
                 {isExpanded && isLongDescription && (
-                  <tr style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-secondary)" }}>
+                  <tr
+                    id={`event-desc-${ev.seq}`}
+                    style={{ borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-secondary)" }}
+                  >
                     <td colSpan={4} style={{ ...td, padding: 16 }}>
                       <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>Full description:</div>
                       <div style={{ fontFamily: "monospace", fontSize: 12, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>
