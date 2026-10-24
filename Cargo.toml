@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = ["contracts/explorer"]
+members  = ["contracts/explorer", "contracts/ipredict_token", "contracts/market", "contracts/referral_registry"]
 
 [workspace.dependencies]
 soroban-sdk = { version = "=21.7.7" }

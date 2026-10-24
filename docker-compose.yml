@@ -1,4 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PERO-J — one-command local development stack (issue #1016)
+#
+#   docker compose up --build
+#
+# Brings up the full stack:
+#   • PostgreSQL  (with migrations pre-applied)
+#   • Redis       (provisioned for caching / rate-limit use)
+#   • Soroban     (stellar/quickstart local sandbox node)
+#   • Indexer     (Node.js API + poller, hot-reload via node --watch)
+#   • Frontend    (Vite + React dev server, hot-reload)
+#   • Seed        (one-shot: pre-seeds test markets + simulated user accounts)
+#
+# The frontend (port 5173) proxies /api to the indexer (port 3001), so no CORS
+# configuration is required. The Soroban sandbox is exposed on port 8000 for
+# direct CLI interaction (e.g. `soroban contract ... --rpc-url http://localhost:8000/soroban/rpc`).
+#
+# Override any value via a .env file next to this compose file (see .env.example).
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -16,17 +37,47 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   indexer:
     build:
       context: .
       dockerfile: indexer/Dockerfile
     restart: unless-stopped
+    command: ["--local", "--enable-soroban-rpc"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/.well-known/stellar.toml > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ── Migrations (one-shot, pre-applies schema before the indexer starts) ────
+  migrate:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
+    restart: "no"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://peroj:peroj@postgres:5432/peroj}
       DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       RPC_URL: ${RPC_URL:-https://soroban-testnet.stellar.org}
       NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
       EXPLORER_CONTRACT_ID: ${EXPLORER_CONTRACT_ID:-}
@@ -35,10 +86,50 @@ services:
       ORACLE_COUNCIL_QUORUM: ${ORACLE_COUNCIL_QUORUM:-}
       PAGERDUTY_ROUTING_KEY: ${PAGERDUTY_ROUTING_KEY:-}
       API_ADMIN_KEY: ${API_ADMIN_KEY:-}
-      PORT: ${INDEXER_PORT:-3001}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    command: ["npm", "run", "migrate"]
+
+  # ── Indexer (backend API + poller, hot-reload) ─────────────────────────────
+  indexer:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      soroban:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment: *indexer-env
     ports:
       - "3001:3001"
+    volumes:
+      # Bind-mount the source so `node --watch` reloads on host edits.
+      - ./indexer:/app
+      # Keep the container-installed node_modules; don't shadow with host's.
+      - /app/node_modules
 
+  # ── Seed (one-shot: pre-seeds test markets + simulated user accounts) ──────
+  seed:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-peroj}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-peroj}
+      PGDATABASE: ${POSTGRES_DB:-peroj}
+    volumes:
+      - ./scripts/seed-local.sql:/seed.sql:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
+
+  # ── Frontend (Vite + React dev server, hot-reload) ─────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -47,9 +138,15 @@ services:
     depends_on:
       - indexer
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+      # Vite proxies /api to the indexer via the compose network hostname.
+      VITE_API_PROXY: ${VITE_API_PROXY:-http://indexer:3001}
+      VITE_API_URL: ""
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   postgres-data:
+  redis-data:

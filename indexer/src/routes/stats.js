@@ -14,6 +14,32 @@ function createStatsRouter(db) {
   let cache = null;
   let cacheExpiresAt = 0;
 
+  /**
+   * @openapi
+   * /stats:
+   *   get:
+   *     summary: Get aggregate stats
+   *     description: Returns aggregate counts (e.g. markets, trades, volume) with a short-lived server-side cache.
+   *     tags:
+   *       - Stats
+   *     responses:
+   *       200:
+   *         description: Aggregate counts
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               additionalProperties: true
+   *       500:
+   *         description: Internal server error
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 error:
+   *                   type: string
+   */
   router.get('/stats', async (req, res, next) => {
     try {
       const now = Date.now();

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import pg from "pg";
 import { createHash } from "node:crypto";
 import { eventEmitter } from "./events.js";
@@ -6,6 +7,8 @@ import { eventEmitter } from "./events.js";
 /** @typedef {import('./types.js').ContractMeta} ContractMeta */
 /** @typedef {import('./types.js').VolumeResult} VolumeResult */
 
+const DEFAULT_BACKEND_POOL_SIZE = 25;
+const DEFAULT_INDEXER_POOL_SIZE = 10;
 const DEFAULT_POOL_SIZE = 20;
 const PING_TIMEOUT_MS = 5000;
 
@@ -16,10 +19,18 @@ const PING_TIMEOUT_MS = 5000;
  * @param {string} [envVal=process.env.DATABASE_POOL_SIZE]
  * @returns {number}
  */
-export function getPoolSize(envVal = process.env.DATABASE_POOL_SIZE) {
+export function getPoolSize(
+  envVal = process.env.DATABASE_POOL_SIZE,
+  serviceType = process.env.SERVICE_TYPE
+) {
   if (envVal === undefined || envVal === null || String(envVal).trim() === "") {
+    if (serviceType === "backend") return DEFAULT_BACKEND_POOL_SIZE;
+    if (serviceType === "indexer") return DEFAULT_INDEXER_POOL_SIZE;
     return DEFAULT_POOL_SIZE;
   }
+
+
+
   const str = String(envVal).trim();
   const parsed = Number(str);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
@@ -31,19 +42,89 @@ export function getPoolSize(envVal = process.env.DATABASE_POOL_SIZE) {
   return parsed;
 }
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: getPoolSize(),
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
+
+// Error event handler: prevent unexpected idle connection drops from crashing the service
+pool.on("error", (err) => {
+  console.error("Unexpected error on idle database client:", err);
+});
 const MIGRATION_LOCK_ID = 57_056;
+
+/** Dedicated client holding the single-writer advisory lock, if owned. */
+let writerLockClient = null;
 const MAX_PAGE = 200;
+const CHECKPOINT_SERVICE_NAME = "soroban-indexer";
+const EVENT_INSERT_SQL = `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  ON CONFLICT DO NOTHING`;
+
+function eventInsertParams(ev) {
+  return [
+    ev.contract_id,
+    ev.function,
+    ev.ledger,
+    ev.tx_hash,
+    ev.description,
+    JSON.stringify(ev.raw_topics),
+    ev.raw_data,
+    ev.sac_asset ?? null,
+    ev.event_addresses ?? [],
+    ev.onchain_seq ?? null,
+  ];
+}
+
+async function insertEvent(queryable, ev) {
+  await queryable.query(EVENT_INSERT_SQL, eventInsertParams(ev));
+}
 
 function escapeLikePattern(value) {
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
     .replace(/[\[%_]/g, "\\$&");
+}
+
+/**
+ * Encodes an opaque pagination cursor from a record identifier and timestamp.
+ *
+ * @param {object} item
+ * @param {string} [idField="id"]
+ * @param {string} [timeField="created_at"]
+ * @returns {string|null} base64url encoded cursor
+ */
+export function encodeCursor(item, idField = "id", timeField = "created_at") {
+  if (!item || typeof item !== "object") return null;
+  const id = item[idField] ?? item.seq ?? item.contract_id;
+  const time = item[timeField]
+    ? new Date(item[timeField]).toISOString()
+    : item.event_count !== undefined
+    ? String(item.event_count)
+    : new Date().toISOString();
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+/**
+ * Decodes an opaque base64url cursor back into { id, time }.
+ *
+ * @param {string} cursorStr
+ * @returns {{ id: any, time: string } | null}
+ */
+export function decodeCursor(cursorStr) {
+  if (!cursorStr || typeof cursorStr !== "string") return null;
+  try {
+    const raw = Buffer.from(cursorStr, "base64url").toString("utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && (parsed.id !== undefined || parsed.time !== undefined)) {
+      return parsed;
+    }
+  } catch {
+    // Malformed cursor
+  }
+  return null;
 }
 
 const migrations = [
@@ -129,33 +210,47 @@ const migrations = [
   },
   {
     id: 7,
-    name: "create_resolution_audit_logs",
+    name: "create_oracle_and_markets_tables",
     sql: `
-      CREATE TABLE IF NOT EXISTS resolution_audit_logs (
-        id                  BIGSERIAL PRIMARY KEY,
-        submission_id       TEXT NOT NULL UNIQUE,
-        response_payload    TEXT NOT NULL,
-        response_status     INTEGER NOT NULL CHECK (response_status BETWEEN 100 AND 599),
-        response_headers    JSONB NOT NULL,
-        resolved_at         TIMESTAMPTZ NOT NULL,
-        evidence_hash       CHAR(64) NOT NULL,
-        recorded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      CREATE TABLE IF NOT EXISTS markets (
+        id              TEXT PRIMARY KEY,
+        contract_id     TEXT NOT NULL,
+        oracle_state    TEXT NOT NULL DEFAULT 'pending',
+        outcome         TEXT,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
       );
+      CREATE INDEX IF NOT EXISTS idx_markets_contract ON markets(contract_id);
+      CREATE INDEX IF NOT EXISTS idx_markets_oracle_state ON markets(oracle_state);
 
-      CREATE OR REPLACE FUNCTION prevent_resolution_audit_log_mutation()
-      RETURNS TRIGGER LANGUAGE plpgsql AS $$
-      BEGIN
-        RAISE EXCEPTION 'resolution audit records are immutable';
-      END;
-      $$;
+      CREATE TABLE IF NOT EXISTS oracle_submissions (
+        id              BIGSERIAL PRIMARY KEY,
+        market_id       TEXT NOT NULL,
+        submitter       TEXT NOT NULL,
+        outcome         TEXT NOT NULL,
+        ledger          BIGINT NOT NULL,
+        tx_hash         TEXT,
+        timestamp       TIMESTAMPTZ DEFAULT NOW(),
+        status          TEXT NOT NULL DEFAULT 'pending',
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_market ON oracle_submissions(market_id);
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_status ON oracle_submissions(status);
+      CREATE INDEX IF NOT EXISTS idx_oracle_submissions_ledger ON oracle_submissions(ledger);
 
-      CREATE TRIGGER resolution_audit_logs_prevent_row_mutation
-        BEFORE UPDATE OR DELETE ON resolution_audit_logs
-        FOR EACH ROW EXECUTE FUNCTION prevent_resolution_audit_log_mutation();
-
-      CREATE TRIGGER resolution_audit_logs_prevent_truncate
-        BEFORE TRUNCATE ON resolution_audit_logs
-        FOR EACH STATEMENT EXECUTE FUNCTION prevent_resolution_audit_log_mutation();
+      CREATE TABLE IF NOT EXISTS oracle_disputes (
+        id              BIGSERIAL PRIMARY KEY,
+        submission_id   BIGINT NOT NULL REFERENCES oracle_submissions(id),
+        market_id       TEXT NOT NULL,
+        disputer        TEXT NOT NULL,
+        reason          TEXT,
+        ledger          BIGINT NOT NULL,
+        tx_hash         TEXT,
+        timestamp       TIMESTAMPTZ DEFAULT NOW(),
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_oracle_disputes_submission ON oracle_disputes(submission_id);
+      CREATE INDEX IF NOT EXISTS idx_oracle_disputes_market ON oracle_disputes(market_id);
     `,
   },
 ];
@@ -171,6 +266,23 @@ process.on("unhandledRejection", async (err) => {
 });
 
 export const db = {
+  /**
+   * Return current database connection pool health metrics.
+   * @returns {{ totalCount: number, idleCount: number, waitingCount: number, max: number, isHealthy: boolean }}
+   */
+  getPoolMetrics() {
+    const max = getPoolSize();
+    const totalCount = pool.totalCount ?? 0;
+    const idleCount = pool.idleCount ?? 0;
+    const waitingCount = pool.waitingCount ?? 0;
+    return {
+      totalCount,
+      idleCount,
+      waitingCount,
+      max,
+      isHealthy: !(waitingCount > 0 && totalCount >= max),
+    };
+  },
   /** Run advisory-locked schema migrations before startup.
    *
    * IMPORTANT: This method acquires a dedicated client from the pool.
@@ -225,6 +337,15 @@ export const db = {
   },
 
   /**
+   * Run an arbitrary parameterised query against the pool.
+   * @param {string} text
+   * @param {any[]} [params]
+   */
+  async query(text, params) {
+    return pool.query(text, params);
+  },
+
+  /**
    * Check if database is reachable.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<boolean>}
@@ -248,36 +369,59 @@ export const db = {
 
   /**
    * Persist a decoded event to the database.
-   * Uses ON CONFLICT DO NOTHING so duplicate events (e.g. from an indexer
-   * restart) are silently skipped.
+  * Skips duplicate event records (e.g. when a backfill resumes after a crash).
    * Uses pool.query — safe to call outside of init().
    *
    * @param {DecodedEvent} ev
    * @returns {Promise<void>}
    */
   async upsertEvent(ev) {
-    await pool.query(
-      `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT DO NOTHING`,
-      [
-        ev.contract_id,
-        ev.function,
-        ev.ledger,
-        ev.tx_hash,
-        ev.description,
-        JSON.stringify(ev.raw_topics),
-        ev.raw_data,
-        ev.sac_asset ?? null,
-        ev.event_addresses ?? [],
-        ev.onchain_seq ?? null,
-      ]
-    );
+    await insertEvent(pool, ev);
     eventEmitter.emit("event", ev);
   },
 
   /**
+   * Persist all events from a ledger and its checkpoint atomically.
+   * @param {DecodedEvent[]} events
+   * @param {{ sequence: number, hash: string }} checkpoint
+   * @returns {Promise<void>}
+   */
+  async persistLedger(events, { sequence, hash }) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const ev of events) {
+        await insertEvent(client, ev);
+      }
+      await client.query(
+        `INSERT INTO checkpoint_state (service_name, last_ledger_sequence, last_ledger_hash)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (service_name) DO UPDATE SET
+           last_ledger_sequence = EXCLUDED.last_ledger_sequence,
+           last_ledger_hash = EXCLUDED.last_ledger_hash,
+           updated_at = NOW()`,
+        [CHECKPOINT_SERVICE_NAME, sequence, hash]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackErr) {
+        console.error("Failed to roll back ledger transaction:", rollbackErr);
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    for (const ev of events) {
+      eventEmitter.emit("event", ev);
+    }
+  },
+
+  /**
    * Return a paginated list of events, optionally filtered by contract and/or function.
+   * Supports cursor-based pagination (opaque base64) and backward-compatible page offset.
    * Uses pool.query — safe to call outside of init().
    *
    * @param {object}  [opts]
@@ -286,9 +430,10 @@ export const db = {
    * @param {string}  [opts.q]         - Full-text search in description field.
    * @param {number}  [opts.page=1]    - 1-based page number.
    * @param {number}  [opts.limit=25]  - Rows per page.
-   * @returns {Promise<{ events: DecodedEvent[], total: number, page: number, limit: number }>}
+   * @param {string}  [opts.cursor]    - Opaque cursor for cursor-based pagination.
+   * @returns {Promise<{ events: DecodedEvent[], next_cursor: string|null, total: number, page: number, limit: number }>}
    */
-  async getEvents({ contract, fn, q, page = 1, limit = 25 } = {}) {
+  async getEvents({ contract, fn, q, page = 1, limit = 25, cursor = null } = {}) {
     const pageNum = Number(page) || 1;
     const limitNum = Math.min(MAX_PAGE, Number(limit) || 25);
     const conditions = [];
@@ -320,16 +465,40 @@ export const db = {
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
     const countRes = await pool.query(`SELECT COUNT(*) FROM events ${where}`, countParams);
-    const total = parseInt(countRes.rows[0].count, 10);
+    const total = parseInt(countRes.rows[0]?.count ?? "0", 10);
 
-    const offset = (pageNum - 1) * limitNum;
-    params.push(limitNum, offset);
+    const queryConditions = [...conditions];
+    const queryParams = [...params];
+    const decoded = decodeCursor(cursor);
+    if (decoded) {
+      queryParams.push(decoded.time, decoded.id);
+      queryConditions.push(`(created_at, seq) < ($${queryParams.length - 1}, $${queryParams.length})`);
+    }
+    const queryWhere = queryConditions.length ? `WHERE ${queryConditions.join(" AND ")}` : "";
+
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    queryParams.push(limitNum + 1);
+    const limitIdx = queryParams.length;
+    let limitClause = `LIMIT $${limitIdx}`;
+    if (offset > 0) {
+      queryParams.push(offset);
+      limitClause += ` OFFSET $${queryParams.length}`;
+    }
+
     const { rows } = await pool.query(
-      `SELECT * FROM events ${where}
-       ORDER BY ledger DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
+      `SELECT * FROM events ${queryWhere}
+       ORDER BY ledger DESC, seq DESC ${limitClause}`,
+      queryParams
     );
-    return { events: rows, total, page: pageNum, limit: limitNum };
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "seq", "created_at");
+    }
+
+    return { events: rows || [], next_cursor, total, page: pageNum, limit: limitNum };
   },
 
   /**
@@ -579,23 +748,193 @@ export const db = {
   /**
    * Return the top N contracts by event count, joined with the contracts
    * table to include the contract name.
+   * Supports cursor-based pagination and offset pagination.
    * Uses pool.query — safe to call outside of init().
    *
-   * @param {number} [limit=10] - Max rows to return (capped at 50).
+   * @param {number|object} [opts=10] - Max rows or options object { limit, cursor, page }
    * @returns {Promise<Array<{ contract_id: string, name: string, event_count: number }>>}
    */
-  async getLeaderboard(limit = 10) {
-    const capped = Math.min(Math.max(Number(limit) || 10, 1), 50);
+  async getLeaderboard(opts = 10) {
+    let limitNum = 10;
+    let cursorVal = null;
+    let pageNum = 1;
+    let isObjectCall = false;
+
+    if (typeof opts === "object" && opts !== null) {
+      isObjectCall = true;
+      limitNum = Number(opts.limit) || 10;
+      cursorVal = opts.cursor || null;
+      pageNum = Number(opts.page) || 1;
+    } else {
+      limitNum = Number(opts) || 10;
+    }
+
+    const capped = Math.min(Math.max(limitNum, 1), 50);
+    const decoded = decodeCursor(cursorVal);
+    const params = [];
+    let having = "";
+    if (decoded) {
+      params.push(Number(decoded.time) || 0, String(decoded.id));
+      having = `HAVING (COUNT(*), e.contract_id) < ($1, $2)`;
+    }
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * capped : 0;
+    params.push(capped + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
     const { rows } = await pool.query(
       `SELECT e.contract_id, COALESCE(c.name, e.contract_id) AS name, COUNT(*) AS event_count
        FROM events e
        LEFT JOIN contracts c ON c.id = e.contract_id
        GROUP BY e.contract_id, COALESCE(c.name, e.contract_id)
-       ORDER BY event_count DESC
-       LIMIT $1`,
-      [capped]
+       ${having}
+       ORDER BY event_count DESC, e.contract_id DESC
+       ${limitClause}`,
+      params
     );
-    return rows;
+
+    let next_cursor = null;
+    if (rows && rows.length > capped) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(
+        { contract_id: last.contract_id, event_count: last.event_count },
+        "contract_id",
+        "event_count"
+      );
+    }
+
+    if (isObjectCall) {
+      return {
+        items: rows || [],
+        leaderboard: rows || [],
+        next_cursor,
+        limit: capped,
+        page: pageNum,
+      };
+    }
+
+    const arr = rows || [];
+    arr.next_cursor = next_cursor;
+    return arr;
+  },
+
+  /**
+   * Return paginated prediction markets.
+   *
+   * @param {object} [opts]
+   * @param {number} [opts.limit=20]
+   * @param {string} [opts.cursor=null]
+   * @param {number} [opts.page=1]
+   * @returns {Promise<{ markets: any[], next_cursor: string|null, total: number, limit: number, page: number }>}
+   */
+  async getMarkets({ limit = 20, cursor = null, page = 1 } = {}) {
+    const limitNum = Math.min(MAX_PAGE, Number(limit) || 20);
+    const pageNum = Number(page) || 1;
+    const decoded = decodeCursor(cursor);
+    const params = [];
+    let where = "";
+    if (decoded) {
+      params.push(decoded.time, decoded.id);
+      where = `WHERE (created_at, id) < ($1, $2)`;
+    }
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    params.push(limitNum + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
+    let rows = [];
+    let total = 0;
+    try {
+      const countRes = await pool.query("SELECT COUNT(*) FROM markets");
+      total = parseInt(countRes.rows[0]?.count ?? "0", 10);
+      const res = await pool.query(
+        `SELECT * FROM markets ${where} ORDER BY created_at DESC, id DESC ${limitClause}`,
+        params
+      );
+      rows = res.rows;
+    } catch {
+      rows = [];
+    }
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "id", "created_at");
+    }
+    return { markets: rows, items: rows, next_cursor, total, limit: limitNum, page: pageNum };
+  },
+
+  /**
+   * Return paginated bets, optionally filtered by market_id.
+   *
+   * @param {object} [opts]
+   * @param {string} [opts.market_id=null]
+   * @param {number} [opts.limit=20]
+   * @param {string} [opts.cursor=null]
+   * @param {number} [opts.page=1]
+   * @returns {Promise<{ bets: any[], next_cursor: string|null, total: number, limit: number, page: number }>}
+   */
+  async getBets({ market_id = null, limit = 20, cursor = null, page = 1 } = {}) {
+    const limitNum = Math.min(MAX_PAGE, Number(limit) || 20);
+    const pageNum = Number(page) || 1;
+    const decoded = decodeCursor(cursor);
+    const conditions = [];
+    const params = [];
+    if (market_id) {
+      params.push(market_id);
+      conditions.push(`market_id = $${params.length}`);
+    }
+    if (decoded) {
+      params.push(decoded.time, decoded.id);
+      conditions.push(`(created_at, id) < ($${params.length - 1}, $${params.length})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    params.push(limitNum + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
+    let rows = [];
+    let total = 0;
+    try {
+      const countWhere = market_id ? "WHERE market_id = $1" : "";
+      const countParams = market_id ? [market_id] : [];
+      const countRes = await pool.query(`SELECT COUNT(*) FROM bets ${countWhere}`, countParams);
+      total = parseInt(countRes.rows[0]?.count ?? "0", 10);
+      const res = await pool.query(
+        `SELECT * FROM bets ${where} ORDER BY created_at DESC, id DESC ${limitClause}`,
+        params
+      );
+      rows = res.rows;
+    } catch {
+      rows = [];
+    }
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "id", "created_at");
+    }
+    return { bets: rows, items: rows, next_cursor, total, limit: limitNum, page: pageNum };
+  },
+
+  /**
+   * Refresh mv_leaderboard_ranks without blocking concurrent readers.
+   */
+  async refreshLeaderboard() {
+    await pool.query("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_leaderboard_ranks");
   },
 
   /**
@@ -619,6 +958,55 @@ export const db = {
   },
 
   /**
+   * Persist an unprocessable ledger event in the dead-letter queue so it is
+   * never lost across restarts or deployments.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {object} entry
+   * @param {number} [entry.ledger_sequence] - Ledger the event came from.
+   * @param {string} [entry.tx_hash]         - Transaction hash (max 64 chars).
+   * @param {string} [entry.topic]           - Event topic (max 128 chars).
+   * @param {*}      [entry.payload]         - Raw event payload (stored as JSONB).
+   * @param {string} [entry.error_message]   - Why the event could not be processed.
+   * @returns {Promise<number>} The id of the inserted dlq_events row.
+   */
+  async insertDlqEvent({ ledger_sequence, tx_hash, topic, payload, error_message } = {}) {
+    const { rows } = await pool.query(
+      `INSERT INTO dlq_events (ledger_sequence, tx_hash, topic, payload, error_message)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id`,
+      [
+        ledger_sequence ?? null,
+        tx_hash ?? null,
+        topic ?? null,
+        payload === undefined ? null : JSON.stringify(payload),
+        error_message ?? null,
+      ]
+    );
+    return rows[0].id;
+  },
+
+  /**
+   * Record a retry attempt for a dead-lettered event by incrementing
+   * retry_count and refreshing created_at.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {number} id - The dlq_events row id.
+   * @returns {Promise<object|null>} The updated row, or null if not found.
+   */
+  async retryDlqEvent(id) {
+    const { rows } = await pool.query(
+      `UPDATE dlq_events
+       SET retry_count = COALESCE(retry_count, 0) + 1,
+           created_at  = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+    return rows[0] ?? null;
+  },
+
+  /**
    * Read the persisted indexer cursor from the indexer_state table.
    * Uses pool.query — safe to call outside of init().
    * @returns {Promise<number|null>} The last successfully indexed ledger, or null.
@@ -639,6 +1027,25 @@ export const db = {
   },
 
   /**
+   * Read the last atomically committed ledger checkpoint.
+   * @returns {Promise<{ last_ledger_sequence: number, last_ledger_hash: string|null }|null>}
+   */
+  async getCheckpoint() {
+    const { rows } = await pool.query(
+      "SELECT last_ledger_sequence, last_ledger_hash FROM checkpoint_state WHERE service_name = $1",
+      [CHECKPOINT_SERVICE_NAME]
+    );
+    if (!rows.length) {
+      return null;
+    }
+    const sequence = Number(rows[0].last_ledger_sequence);
+    if (!Number.isSafeInteger(sequence)) {
+      throw new Error(`Invalid checkpoint ledger sequence: ${rows[0].last_ledger_sequence}`);
+    }
+    return { last_ledger_sequence: sequence, last_ledger_hash: rows[0].last_ledger_hash };
+  },
+
+  /**
    * Persist the indexer cursor so the process can resume from this ledger
    * after a restart.
    * Uses pool.query — safe to call outside of init().
@@ -653,4 +1060,146 @@ export const db = {
       [String(ledger)]
     );
   },
+
+  // ── Oracle & Markets ────────────────────────────────────────────────────────
+
+  /**
+   * Insert or update a market record.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {object} market
+   * @param {string} market.id - Market identifier
+   * @param {string} market.contract_id - Contract address
+   * @param {string} market.oracle_state - Oracle state (pending, submitted, disputed, finalized)
+   * @param {string} [market.outcome] - Optional outcome value
+   * @returns {Promise<void>}
+   */
+  async upsertMarket(market) {
+    await pool.query(
+      `INSERT INTO markets (id, contract_id, oracle_state, outcome, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET 
+         oracle_state = $3,
+         outcome = $4,
+         updated_at = NOW()`,
+      [market.id, market.contract_id, market.oracle_state, market.outcome ?? null]
+    );
+  },
+
+  /**
+   * Get market by ID.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {string} marketId
+   * @returns {Promise<object|null>}
+   */
+  async getMarket(marketId) {
+    const { rows } = await pool.query("SELECT * FROM markets WHERE id = $1", [marketId]);
+    return rows[0] ?? null;
+  },
+
+  /**
+   * Insert an oracle submission record.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {object} submission
+   * @param {string} submission.market_id - Market identifier
+   * @param {string} submission.submitter - Submitter address
+   * @param {string} submission.outcome - Submitted outcome
+   * @param {number} submission.ledger - Ledger number
+   * @param {string} [submission.tx_hash] - Transaction hash
+   * @param {string} [submission.status] - Status (pending, disputed, finalized)
+   * @returns {Promise<number>} The inserted submission ID
+   */
+  async insertOracleSubmission(submission) {
+    const { rows } = await pool.query(
+      `INSERT INTO oracle_submissions (market_id, submitter, outcome, ledger, tx_hash, status, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id`,
+      [
+        submission.market_id,
+        submission.submitter,
+        submission.outcome,
+        submission.ledger,
+        submission.tx_hash ?? null,
+        submission.status ?? "pending",
+      ]
+    );
+    return rows[0].id;
+  },
+
+  /**
+   * Update oracle submission status.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {number} submissionId
+   * @param {string} status
+   * @returns {Promise<void>}
+   */
+  async updateOracleSubmissionStatus(submissionId, status) {
+    await pool.query(
+      `UPDATE oracle_submissions SET status = $1 WHERE id = $2`,
+      [status, submissionId]
+    );
+  },
+
+  /**
+   * Get the most recent oracle submission for a market.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {string} marketId
+   * @returns {Promise<object|null>}
+   */
+  async getLatestOracleSubmission(marketId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM oracle_submissions 
+       WHERE market_id = $1 
+       ORDER BY ledger DESC, id DESC 
+       LIMIT 1`,
+      [marketId]
+    );
+    return rows[0] ?? null;
+  },
+
+  /**
+   * Insert an oracle dispute record.
+   * Uses pool.query — safe to call outside of init().
+   *
+   * @param {object} dispute
+   * @param {number} dispute.submission_id - Submission being disputed
+   * @param {string} dispute.market_id - Market identifier
+   * @param {string} dispute.disputer - Disputer address
+   * @param {string} [dispute.reason] - Dispute reason
+   * @param {number} dispute.ledger - Ledger number
+   * @param {string} [dispute.tx_hash] - Transaction hash
+   * @returns {Promise<number>} The inserted dispute ID
+   */
+  async insertOracleDispute(dispute) {
+    const { rows } = await pool.query(
+      `INSERT INTO oracle_disputes (submission_id, market_id, disputer, reason, ledger, tx_hash, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       RETURNING id`,
+      [
+        dispute.submission_id,
+        dispute.market_id,
+        dispute.disputer,
+        dispute.reason ?? null,
+        dispute.ledger,
+        dispute.tx_hash ?? null,
+      ]
+    );
+    return rows[0].id;
+  },
+
+  /**
+   * Execute a raw query (for testing or advanced use).
+   * @param {string} text
+   * @param {Array} [params]
+   * @returns {Promise<object>}
+   */
+  async query(text, params) {
+    return pool.query(text, params);
+  },
 };
+
+

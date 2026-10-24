@@ -31,6 +31,9 @@
 //! ```
 
 #[cfg(test)]
+pub mod invariant_property_tests;
+
+#[cfg(test)]
 mod integration {
     use std::env;
 

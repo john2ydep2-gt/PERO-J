@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PERO-J Status</title>
+    <meta name="description" content="Live status of the PERO-J network: Stellar RPC, indexer, oracle resolvers, and REST API." />
+    <style>
+      :root {
+        --bg: #0f1218; --card: #171b24; --border: #262c3a; --text: #e6e9ef; --muted: #8a93a6;
+        --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --unknown: #64748b;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+      main { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 1.6rem; margin: 0 0 4px; }
+      h2 { font-size: 1.1rem; margin: 32px 0 12px; }
+      .muted { color: var(--muted); font-size: 0.85rem; }
+      .banner { border-radius: 10px; padding: 18px 20px; margin: 20px 0; font-weight: 600; font-size: 1.05rem; }
+      .banner.operational { background: rgba(34,197,94,.15); border: 1px solid var(--ok); }
+      .banner.degraded { background: rgba(245,158,11,.15); border: 1px solid var(--warn); }
+      .banner.major_outage { background: rgba(239,68,68,.15); border: 1px solid var(--bad); }
+      .banner.unknown { background: rgba(100,116,139,.15); border: 1px solid var(--unknown); }
+      .maintenance { background: rgba(59,130,246,.15); border: 1px solid #3b82f6; border-radius: 10px; padding: 12px 16px; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
+      .component { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+      .component:last-child { border-bottom: 0; }
+      .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+      .name { font-weight: 600; }
+      .pill { font-size: .8rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+      .pill.operational { color: var(--ok); background: rgba(34,197,94,.12); }
+      .pill.degraded { color: var(--warn); background: rgba(245,158,11,.12); }
+      .pill.major_outage { color: var(--bad); background: rgba(239,68,68,.12); }
+      .pill.unknown { color: var(--unknown); background: rgba(100,116,139,.12); }
+      .bars { display: flex; gap: 2px; margin-top: 10px; height: 26px; align-items: flex-end; }
+      .bars span { flex: 1; border-radius: 2px; min-height: 3px; }
+      .metrics { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 8px; }
+      .incident { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+      .incident:last-child { border-bottom: 0; }
+      .incident h3 { margin: 0 0 4px; font-size: 1rem; }
+      .update { margin: 8px 0 0 0; padding-left: 12px; border-left: 2px solid var(--border); }
+      details { margin-top: 10px; }
+      summary { cursor: pointer; color: #93c5fd; }
+      ul { margin: 6px 0; padding-left: 20px; }
+      footer { margin-top: 40px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>PERO-J System Status</h1>
+      <div class="muted" id="checked">Loading live status…</div>
+      <div id="maintenance"></div>
+      <div class="banner unknown" id="overall" role="status" aria-live="polite">Checking systems…</div>
+
+      <h2>Components</h2>
+      <div class="card" id="components"></div>
+
+      <h2>Active incidents</h2>
+      <div class="card" id="active"><div class="incident muted">No active incidents.</div></div>
+
+      <h2>Incident history &amp; post-mortems</h2>
+      <div class="card" id="history"><div class="incident muted">No past incidents.</div></div>
+
+      <footer class="muted">Updated automatically by health probes. This page refreshes every 30 seconds.</footer>
+    </main>
+
+    <script>
+      const LABEL = { operational: "Operational", degraded: "Degraded", major_outage: "Major outage", unknown: "Unknown" };
+      const COLOR = { operational: "var(--ok)", degraded: "var(--warn)", major_outage: "var(--bad)", unknown: "var(--unknown)" };
+
+      const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+      const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : "—");
+
+      function renderComponent(c) {
+        const max = Math.max(1, ...c.latencyHistory.map((h) => h.latencyMs ?? 0));
+        const bars = c.latencyHistory
+          .map((h) => `<span title="${esc(fmt(h.t))}: ${h.latencyMs ?? "n/a"}ms" style="height:${Math.max(12, ((h.latencyMs ?? 0) / max) * 100)}%;background:${COLOR[h.status]}"></span>`)
+          .join("");
+        const extra = [];
+        if (c.latencyMs != null) extra.push(`Latency: <b>${c.latencyMs} ms</b>`);
+        if (c.uptimePercent != null) extra.push(`Uptime (24h): <b>${c.uptimePercent}%</b>`);
+        if (c.details?.lagSeconds != null) extra.push(`Indexer lag: <b>${c.details.lagSeconds}s</b>`);
+        if (c.details?.rpcLatestLedger != null) extra.push(`Latest ledger: <b>${c.details.rpcLatestLedger}</b>`);
+        return `<div class="component">
+          <div class="row"><span class="name">${esc(c.name)}</span><span class="pill ${c.status}">${LABEL[c.status]}</span></div>
+          <div class="muted">${esc(c.description)}</div>
+          <div class="muted">${esc(c.message)}</div>
+          <div class="metrics muted">${extra.join("")}</div>
+          <div class="bars" aria-hidden="true">${bars}</div>
+        </div>`;
+      }
+
+      function renderIncident(i) {
+        const updates = i.updates.map((u) => `<div class="update"><b>${esc(u.status)}</b> · <span class="muted">${esc(fmt(u.at))}</span><div>${esc(u.message)}</div></div>`).join("");
+        const pm = i.postMortem
+          ? `<details><summary>Post-mortem</summary>
+              <p>${esc(i.postMortem.summary)}</p>
+              <p><b>Root cause:</b> ${esc(i.postMortem.rootCause)}</p>
+              <p><b>Resolution:</b> ${esc(i.postMortem.resolution)}</p>
+              ${i.postMortem.actionItems?.length ? `<b>Action items</b><ul>${i.postMortem.actionItems.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}
+            </details>`
+          : "";
+        return `<div class="incident">
+          <h3>${esc(i.title)}</h3>
+          <div class="muted">Impact: ${esc(i.impact)} · ${esc(fmt(i.startedAt))}${i.resolvedAt ? ` → ${esc(fmt(i.resolvedAt))}` : " (ongoing)"}</div>
+          ${updates}${pm}
+        </div>`;
+      }
+
+      async function refresh() {
+        try {
+          const [summary, incidents] = await Promise.all([
+            fetch("/status/api/summary").then((r) => r.json()),
+            fetch("/status/api/incidents").then((r) => r.json()),
+          ]);
+          const overall = document.getElementById("overall");
+          overall.className = `banner ${summary.overall}`;
+          overall.textContent = summary.summary;
+          document.getElementById("checked").textContent = `Last checked: ${fmt(summary.lastCheckedAt)}`;
+          document.getElementById("maintenance").innerHTML = summary.maintenance ? `<div class="maintenance">🛠 ${esc(summary.maintenance)}</div>` : "";
+          document.getElementById("components").innerHTML = summary.components.length
+            ? summary.components.map(renderComponent).join("")
+            : `<div class="component muted">Waiting for first probe round…</div>`;
+          if (incidents.active.length) document.getElementById("active").innerHTML = incidents.active.map(renderIncident).join("");
+          if (incidents.history.length) document.getElementById("history").innerHTML = incidents.history.map(renderIncident).join("");
+        } catch (err) {
+          document.getElementById("checked").textContent = "Unable to reach status service. Retrying…";
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 30_000);
+    </script>
+  </body>
+</html>

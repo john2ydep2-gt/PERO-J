@@ -1,0 +1,4 @@
+/* App-level styles for PERO-J.
+   Intentionally minimal — global layout/styling lives in component CSS files.
+   This file exists so the Vite production build can resolve `import './App.css'`
+   in App.tsx. */

@@ -1,4 +1,6 @@
 const BASE = import.meta.env.VITE_API_URL || "/api";
+const SOROBAN_RPC_URL = import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org";
+const CONTRACT_ID = import.meta.env.VITE_CONTRACT_ID || "";
 
 export interface DecodedEvent {
   seq: number;
@@ -45,6 +47,58 @@ export interface ContractsResponse {
   limit: number;
 }
 
+export interface ProposedOutcome {
+  id: string;
+  contract_id: string;
+  outcome: string;
+  proposer: string;
+  proposed_at: string;
+  challenge_deadline: string;
+  disputer_bond: string;
+  challenge_reward: string;
+  status: "proposed" | "challenged" | "finalized";
+}
+
+export interface ChallengeResponse {
+  ok: boolean;
+  tx_hash?: string;
+  outcome: ProposedOutcome;
+}
+
+export interface CouncilVote {
+  voter: string;
+  vote: "uphold" | "overturn" | "abstain";
+  cast_at: string;
+}
+
+export interface DisputeEvidence {
+  label: string;
+  url: string;
+}
+
+export interface DisputeTimelineEntry {
+  at: string;
+  actor: string;
+  action: string;
+  detail?: string;
+}
+
+export interface DisputeDetail {
+  market_id: string;
+  status: "proposed" | "challenged" | "finalized";
+  submitter: string;
+  proposed_outcome: string;
+  submitter_bond: string;
+  challenger?: string;
+  disputed_outcome?: string;
+  challenger_bond?: string;
+  council_votes: CouncilVote[];
+  council_size: number;
+  resolution_deadline?: string;
+  evidence: DisputeEvidence[];
+  timeline: DisputeTimelineEntry[];
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -55,6 +109,36 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Tracks whether the client is currently operating in direct on-chain mode
+ * because the backend API is unavailable. Consumers can subscribe to render
+ * a non-intrusive warning banner.
+ */
+let onChainMode = false;
+const onChainModeListeners = new Set<(active: boolean) => void>();
+
+export function isOnChainMode(): boolean {
+  return onChainMode;
+}
+
+export function subscribeOnChainMode(listener: (active: boolean) => void): () => void {
+  onChainModeListeners.add(listener);
+  listener(onChainMode);
+  return () => {
+    onChainModeListeners.delete(listener);
+  };
+}
+
+function setOnChainMode(active: boolean): void {
+  if (onChainMode === active) return;
+  onChainMode = active;
+  onChainModeListeners.forEach((listener) => listener(active));
+}
+
+function isFailoverStatus(status: number): boolean {
+  return status === 500 || status === 503;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -62,6 +146,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     const res = await fetch(BASE + path, { ...init, signal: controller.signal });
     if (!res.ok) throw new ApiError(res.status, path);
+    setOnChainMode(false);
     return await res.json();
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -83,6 +168,64 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * Query contract state directly via Soroban RPC. Used as a transparent
+ * fallback when the backend API is down but the chain is operational.
+ */
+async function sorobanRpc<T>(method: string, params: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch(SOROBAN_RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new ApiError(res.status, method);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || "Soroban RPC error");
+    return json.result as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Resilient fetch wrapper: tries the backend endpoint first and transparently
+ * falls back to querying contract state directly via Soroban RPC on HTTP
+ * 500/503 or network timeout. Returns the fallback result when available.
+ */
+async function resilientGet<T>(path: string, fallback: () => Promise<T>): Promise<T> {
+  try {
+    return await get<T>(path);
+  } catch (error) {
+    const shouldFailover =
+      (error instanceof ApiError && isFailoverStatus(error.status)) ||
+      (error instanceof Error && error.message === "Request timed out") ||
+      error instanceof TypeError;
+    if (!shouldFailover) throw error;
+    const result = await fallback();
+    setOnChainMode(true);
+    return result;
+  }
+}
+
+async function fetchOnChainOutcome(id: string): Promise<ProposedOutcome> {
+  const result = await sorobanRpc<{ xdr: string }>("getLedgerEntries", {
+    keys: [{ contract: CONTRACT_ID, key: id }],
+  });
+  return JSON.parse(atob(result.xdr)) as ProposedOutcome;
+}
+
+async function fetchOnChainDispute(marketId: string): Promise<DisputeDetail> {
+  const result = await sorobanRpc<{ xdr: string }>("getLedgerEntries", {
+    keys: [{ contract: CONTRACT_ID, key: marketId }],
+  });
+  return JSON.parse(atob(result.xdr)) as DisputeDetail;
 }
 
 /**
@@ -117,6 +260,44 @@ export function streamEvents(
   };
 }
 
+
+export interface MarketUpdate {
+  contractId?: string;
+  type: string;
+  data?: Record<string, unknown>;
+  timestamp?: number;
+}
+
+/**
+ * Connect to the Server-Sent Events stream for real-time market updates.
+ * Eliminates 3-5s polling latency and saves bandwidth on static markets.
+ */
+export function streamMarketUpdates(
+  contractId: string | undefined,
+  onUpdate: (update: MarketUpdate) => void,
+  onError?: (err: Event) => void
+): () => void {
+  const q = contractId ? `?contract=${encodeURIComponent(contractId)}` : "";
+  const url = `${BASE}/markets/stream${q}`;
+  const eventSource = new EventSource(url);
+
+  eventSource.onmessage = (e) => {
+    try {
+      const data: MarketUpdate = JSON.parse(e.data);
+      onUpdate(data);
+    } catch (err) {
+      console.error("Failed to parse market update SSE frame:", err);
+    }
+  };
+
+  if (onError) {
+    eventSource.onerror = onError;
+  }
+
+  return () => {
+    eventSource.close();
+  };
+}
 export const api = {
   distinctFunctions: () => get<string[]>("/functions"),
   events: (params: { contract?: string; fn?: string; q?: string; page?: number }) => {
@@ -138,5 +319,12 @@ export const api = {
   contract:         (id: string)                          => get<ContractMeta>(`/contracts/${id}`),
   wallet:           (address: string, page: number = 1)   => get<WalletEventsResponse>(`/wallet/${address}?page=${page}`),
   registerContract: (meta: ContractMeta)                  => post<{ ok: boolean }>("/contracts", meta),
+  proposedOutcome:  (id: string)                          =>
+    resilientGet<ProposedOutcome>(`/outcomes/${id}`, () => fetchOnChainOutcome(id)),
+  challengeOutcome: (id: string, payload: { challenger: string; bond: string; signed_xdr: string }) =>
+    post<ChallengeResponse>(`/outcomes/${id}/challenge`, payload),
+  dispute:          (marketId: string)                    =>
+    resilientGet<DisputeDetail>(`/disputes/${marketId}`, () => fetchOnChainDispute(marketId)),
   streamEvents,
+  streamMarketUpdates,
 };

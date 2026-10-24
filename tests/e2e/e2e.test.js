@@ -121,4 +121,31 @@ test.describe("Full pipeline: contract → indexer → API → frontend", () => 
       await page.waitForSelector("table tbody tr", { timeout: 15_000 });
     }
   });
+
+  test("Legacy /api route redirects to /api/v1 with 301", async () => {
+    const res = await fetch(`${API_BASE}/api/events?limit=1`, { redirect: "manual" });
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toContain("/api/v1/events");
+  });
+
+  test("API v1 returns the indexed event with cursor pagination", async () => {
+    const res = await fetch(`${API_BASE}/api/v1/events?limit=10`);
+    expect(res.ok).toBeTruthy();
+    const body = await res.json();
+    expect(body.events).toBeDefined();
+    expect(Array.isArray(body.events)).toBeTruthy();
+    expect(body).toHaveProperty("next_cursor");
+  });
+
+  test("API v1 leaderboard and market endpoints respond under /api/v1 namespace", async () => {
+    const lbRes = await fetch(`${API_BASE}/api/v1/leaderboard?limit=5`);
+    expect(lbRes.ok).toBeTruthy();
+
+    const mktRes = await fetch(`${API_BASE}/api/v1/markets?limit=5`);
+    expect(mktRes.ok).toBeTruthy();
+    const mktBody = await mktRes.json();
+    expect(mktBody).toHaveProperty("markets");
+    expect(mktBody).toHaveProperty("next_cursor");
+  });
 });
+

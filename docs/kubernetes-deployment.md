@@ -65,3 +65,33 @@ The indexer container exposes two health endpoints:
    kubectl logs -f deployment/indexer
    kubectl logs -f deployment/frontend
    ```
+
+
+## Production image hardening
+
+The indexer production image (`indexer/Dockerfile` / `indexer/Dockerfile.indexer`)
+is a multi-stage build that produces a minimal, non-root runtime:
+
+- **Stage 1 (deps)** — `node:20-alpine` installs production-only dependencies
+  (`npm ci --omit=dev`), strips the transitive `sodium-native` native package
+  (~14MB; `@stellar/stellar-base` falls back to the pure-JS `tweetnacl`), and
+  prunes docs/test/source-map files from `node_modules` (→ ~16MB of deps).
+- **Stage 2 (runtime)** — `node:20-alpine` copies only the production
+  `node_modules` and `src/`, and runs as a dedicated non-root `appuser`
+  (fixed UID/GID 10001). No dev dependencies, no build tooling, and no shell
+  tools (e.g. `curl`) are included in the runtime image.
+
+The resulting image is ~140MB uncompressed (~50MB compressed), under the
+150MB production target, and the process never runs as root.
+
+The `k8s/indexer-deployment.yaml` enforces this at the orchestration layer with
+a pod `securityContext` (`runAsNonRoot: true`, `runAsUser: 10001`,
+`runAsGroup: 10001`, `fsGroup: 10001`) and a container `securityContext`
+(`allowPrivilegeEscalation: false`, all Linux capabilities dropped).
+
+> The PERO-J backend is a single Node.js service that serves the REST API,
+> polls Soroban RPC, and optionally submits decoded events on-chain (the
+> "oracle" role). One production image therefore covers the API, indexer, and
+> oracle roles — there are no separate API/oracle services to build distinct
+> images for. The indexer is plain JavaScript run directly with `node` (no
+> TypeScript compile step).

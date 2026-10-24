@@ -1,0 +1,48 @@
+# Local monitoring stack (overlay for the root docker-compose.yml): Prometheus +
+# Grafana with PERO-J dashboards auto-provisioned on startup. Volume paths are
+# relative to the repository root because Compose resolves them against the
+# first (base) compose file.
+#
+#   docker compose -f docker-compose.yml -f infra/monitoring/docker-compose.monitoring.yml up -d
+#   open http://localhost:3300  (admin / $GRAFANA_ADMIN_PASSWORD)
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://peroj:peroj@postgres:5432/peroj?sslmode=disable}
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/pero-j/pipeline-health.json
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/dashboards:/var/lib/grafana/dashboards/pero-j:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3300:3000"
+
+volumes:
+  prometheus-data:
+  grafana-data:
