@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`c2742ac`](../../commit/c2742ac870d86c0ce1d6d7af85ebdf25dfe7092d))
+
 - Auto-update CHANGELOG.md [skip ci] ([`0670956`](../../commit/067095630146ab2da49e25c029990bffe8a4be84))
 
 - Auto-update CHANGELOG.md [skip ci] ([`6dc3378`](../../commit/6dc33781ee4f6612f3b0679490763b64ba7ca084))
@@ -1428,6 +1430,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Configure alert rules for stuck markets (>48h past expiry) and council inactivity ([`764231d`](../../commit/764231d5c6f5cc2a5ec1faa0b8be30588ac9e15f))
 
 - Configure alert rules for indexer stall (lag > 100 ledgers) and RPC failure bursts ([`8c80654`](../../commit/8c80654a6306a6563a33ca22abc7253243bc9c9e))
 
