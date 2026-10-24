@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`960c4eb`](../../commit/960c4eb76a3f8406d8855d3cd88713b048642e14))
+
 - Auto-update CHANGELOG.md [skip ci] ([`ddf0ee1`](../../commit/ddf0ee10e5cfce97877e8ede6d24f87cf8be4f7c))
 
 - Auto-update CHANGELOG.md [skip ci] ([`5569330`](../../commit/5569330cb81e49574005d1f95283356b02c1623d))
@@ -1442,6 +1444,12 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Zod event validation with DLQ and single-writer advisory lock ([`8f03bea`](../../commit/8f03beab87b4bf52c9ab763d79ce0704762583bd))
+
+Closes [#939](../../issues/939)
+  Closes [#934](../../issues/934)
+
 
 - Set up Prometheus scraping configuration and Prometheus alert manager ([`c83ca4b`](../../commit/c83ca4bfa0f2e3b7455dbb222a72fcf3dc6f27c2))
 
