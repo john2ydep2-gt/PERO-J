@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`077fa34`](../../commit/077fa3462dd86924903d2df1e66da667e97bdaff))
+
 - Auto-update CHANGELOG.md [skip ci] ([`7cf22a7`](../../commit/7cf22a746b9d7ca31a986a121cbddbf5838e8bf2))
 
 - Compile runbook index mapping each operational alert to its exact recovery procedure ([`e1e5363`](../../commit/e1e53636779d62dc6b16d532de55a7af1e6b9ac3))
@@ -1677,6 +1679,16 @@ Closes [#913](../../issues/913)
   Closes [#914](../../issues/914)
   Closes [#917](../../issues/917)
   Closes [#919](../../issues/919)
+
+
+- Implement BetPlaced cache invalidation and bond escrow invariant verification ([`4ae00bd`](../../commit/4ae00bd8206c3f54d3e003dae3512d9e8509e29c))
+
+Closes [#968](../../issues/968), Closes [#958](../../issues/958)
+
+
+- Implement cursor-based pagination and normalize /api/v1 routes ([`8815785`](../../commit/8815785cf1a0eaca8ce6e1e8336f06534500f2fe))
+
+Closes [#966](../../issues/966), Closes [#965](../../issues/965)
 
 
 - Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
