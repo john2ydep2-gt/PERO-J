@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`cafb672`](../../commit/cafb6722df9a7b3f7776583399c10eba7bddadfc))
+
 - Auto-update CHANGELOG.md [skip ci] ([`a67f935`](../../commit/a67f9351de84fe5a74f22ca3d774b160f0b89704))
 
 - Auto-update CHANGELOG.md [skip ci] ([`960c4eb`](../../commit/960c4eb76a3f8406d8855d3cd88713b048642e14))
@@ -1711,6 +1713,18 @@ Add hourly quorum checks and PagerDuty escalation at 24h, 48h, and 60h. Resolve 
 
 
 - Add oracle disputes endpoint ([`d7b3067`](../../commit/d7b3067a32c7983a079111764ecf94bb175e1773))
+
+- Batch upserts, Prometheus metrics, and reorg detection ([`3991e23`](../../commit/3991e23a5295f42f2920b8fe878306c6e1124c91))
+
+Closes [#941](../../issues/941)
+  Closes [#940](../../issues/940)
+  Closes [#935](../../issues/935)
+
+  - batch events per ledger into one transactional multi-row INSERT
+  - expose indexer_* metrics via prom-client at GET /metrics
+  - track last 32 ledger hashes in indexed_ledgers; on mismatch roll back
+    from the fork point and re-index
+
 
 - Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
 
