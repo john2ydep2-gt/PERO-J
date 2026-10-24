@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`a67f935`](../../commit/a67f9351de84fe5a74f22ca3d774b160f0b89704))
+
 - Auto-update CHANGELOG.md [skip ci] ([`960c4eb`](../../commit/960c4eb76a3f8406d8855d3cd88713b048642e14))
 
 - Auto-update CHANGELOG.md [skip ci] ([`ddf0ee1`](../../commit/ddf0ee10e5cfce97877e8ede6d24f87cf8be4f7c))
@@ -1623,13 +1625,6 @@ Add `.github/workflows/deploy-staging.yml` which deploys the latest `main`
   issue [#1014](../../issues/1014).
 
 
-- Monitor council inactivity ([`b5dac8c`](../../commit/b5dac8c7a912aa947664e47b9261e1656c9a2cdc))
-
-Add hourly quorum checks and PagerDuty escalation at 24h, 48h, and 60h. Resolve alerts when quorum is reached or disputes close.
-
-
-- Add oracle disputes endpoint ([`d7b3067`](../../commit/d7b3067a32c7983a079111764ecf94bb175e1773))
-
 - Add dedicated dispute_votes table and aggregation queries ([`3c0cebd`](../../commit/3c0cebd713b5220ac364ff611849691170d28dfe))
 
 - Add oracle submitter portal and participation interface ([`4d1c395`](../../commit/4d1c395eedb2ff37ed616c6b8a21e582911020c3))
@@ -1704,6 +1699,18 @@ Closes [#968](../../issues/968), Closes [#958](../../issues/958)
 
 Closes [#966](../../issues/966), Closes [#965](../../issues/965)
 
+
+- Persist resolution audit evidence ([`34d061a`](../../commit/34d061a528485e1539f873d4252f6f52d58b91ff))
+
+Add immutable audit records with raw response evidence, hashes, and public verification endpoints.
+
+
+- Monitor council inactivity ([`b5dac8c`](../../commit/b5dac8c7a912aa947664e47b9261e1656c9a2cdc))
+
+Add hourly quorum checks and PagerDuty escalation at 24h, 48h, and 60h. Resolve alerts when quorum is reached or disputes close.
+
+
+- Add oracle disputes endpoint ([`d7b3067`](../../commit/d7b3067a32c7983a079111764ecf94bb175e1773))
 
 - Configure database pool size ([`df7e5bb`](../../commit/df7e5bbd7b70c022f583f715bd716993b77d7f55))
 
