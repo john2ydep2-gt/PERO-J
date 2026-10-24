@@ -1,0 +1,47 @@
+groups:
+  - name: market_and_council_alerts
+    rules:
+      - alert: MarketStuckInUnresolved
+        expr: count(markets{status="open", ends_at_elapsed_hours > 48}) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: oracle
+          tier: protocol
+          team: operations
+        annotations:
+          summary: "Stuck market(s) unresolved past 48h expiration threshold"
+          description: "{{ $value }} prediction market(s) remain in 'open' status >48 hours past expiry without outcome submission or finalization. Affected market IDs: {{ $labels.market_id }}."
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/ORACLE_RUNBOOK.md"
+          dashboard_url: "https://grafana.peroj.network/d/market-lifecycle"
+          action: "Investigate oracle adapter data feeds, outcome dispute queues, or initiate manual resolution."
+
+      - alert: MarketStuck
+        expr: count by (market_id) (markets{status="open", ends_at_elapsed_hours > 48}) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: oracle
+          tier: protocol
+          team: operations
+        annotations:
+          summary: "Individual market {{ $labels.market_id }} stuck unresolved past 48h"
+          description: "Market {{ $labels.market_id }} has passed its expiry by >48 hours without resolution."
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/ORACLE_RUNBOOK.md"
+          dashboard_url: "https://grafana.peroj.network/d/market-lifecycle"
+          action: "Dispatch emergency resolution procedures per ORACLE_RUNBOOK.md."
+
+      - alert: CouncilVoteStalled
+        expr: count(disputes{status="escalated", elapsed_hours > 24, votes_cast < 4}) > 0
+        for: 5m
+        labels:
+          severity: high
+          service: governance
+          tier: council
+          team: operations
+        annotations:
+          summary: "Dispute council vote stalled (>24h with <4 votes)"
+          description: "{{ $value }} escalated dispute(s) are stalled past the 24-hour SLA window with fewer than 4 quorum votes recorded. Affected dispute IDs: {{ $labels.dispute_id }}."
+          runbook_url: "https://github.com/john2ydep2-gt/PERO-J/blob/main/docs/COUNCIL_RUNBOOK.md"
+          dashboard_url: "https://grafana.peroj.network/d/dispute-council"
+          action: "Page council quorum members and alert ops channel to ensure prompt vote finalization."
