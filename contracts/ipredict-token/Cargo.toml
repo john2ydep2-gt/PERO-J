@@ -1,0 +1,23 @@
+[package]
+name    = "ipredict-token"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { version = "=21.7.7", features = ["alloc"] }
+
+[dev-dependencies]
+soroban-sdk = { version = "=21.7.7", features = ["testutils"] }
+
+[profile.release]
+opt-level       = "z"
+overflow-checks = true
+debug           = 0
+strip           = "symbols"
+panic           = "abort"
+codegen-units   = 1
+lto             = true

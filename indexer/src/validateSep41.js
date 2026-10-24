@@ -26,7 +26,8 @@ const NETWORK_PASSPHRASE = process.env.NETWORK_PASSPHRASE || Networks.TESTNET;
 const DUMMY_SOURCE = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
 const MAX_CONCURRENT_CHECKS = 3;
 const MAX_RATE_LIMIT_RETRIES = 3;
-const RATE_LIMIT_RETRY_BASE_MS = 250;
+const RATE_LIMIT_RETRY_BASE_MS = 500;
+const RATE_LIMIT_RETRY_CAP_MS = 30_000;
 
 const rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
@@ -76,7 +77,13 @@ export function isMissingFunctionError(err) {
 function isRateLimitError(err) {
   const status = err?.status || err?.response?.status;
   const msg = String(err?.message || err?.error || err || "");
-  return status === 429 || msg.includes("429") || /rate.?limit/i.test(msg);
+  return (
+    status === 429 ||
+    status === 503 ||
+    msg.includes("429") ||
+    msg.includes("503") ||
+    /rate.?limit/i.test(msg)
+  );
 }
 
 function wait(ms) {
@@ -91,7 +98,21 @@ async function withRateLimitRetry(fn) {
       if (!isRateLimitError(err) || attempt >= MAX_RATE_LIMIT_RETRIES) {
         throw err;
       }
-      await wait(RATE_LIMIT_RETRY_BASE_MS * 2 ** attempt);
+      // Full jitter: sleep = random(0, min(CAP, BASE * 2^attempt))
+      const delayMs = Math.floor(
+        Math.random() * Math.min(RATE_LIMIT_RETRY_CAP_MS, RATE_LIMIT_RETRY_BASE_MS * 2 ** attempt),
+      );
+      console.warn(
+        JSON.stringify({
+          event: "rpc_retry",
+          attempt: attempt + 1,
+          maxRetries: MAX_RATE_LIMIT_RETRIES,
+          delayMs,
+          status: err?.status || err?.response?.status,
+          message: String(err?.message || err),
+        }),
+      );
+      await wait(delayMs);
     }
   }
 }

@@ -1,0 +1,33 @@
+# Staging ConfigMap for PERO-J (testnet).
+#
+# Provides the environment variables the indexer actually reads
+# (SOROBAN_RPC_URL, HORIZON_URL, NETWORK_PASSPHRASE, …) pointing at the Stellar
+# testnet. Applied into the `pero-j-staging` namespace; the indexer and frontend
+# Deployments envFrom this ConfigMap (name: pero-config).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pero-config
+  namespace: pero-j-staging
+  labels:
+    app.kubernetes.io/name: pero-j
+    app.kubernetes.io/environment: staging
+data:
+  NODE_ENV: "production"
+  # ── Indexer (testnet) ────────────────────────────────────────────────────
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+  HORIZON_URL: "https://horizon-testnet.stellar.org"
+  NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+  START_LEDGER: "0"            # 0 = resume from the latest ledger minus 100
+  POLL_MS: "5000"
+  PORT: "3001"
+  LAG_ALERT_THRESHOLD_S: "30"
+  DATABASE_POOL_SIZE: "20"
+  SAC_ASSETS: "[]"
+  # Public testnet ExplorerContract id (set by the team after the staging
+  # contract is deployed to testnet; empty ⇒ index without on-chain submission).
+  SOROBAN_EXPLORER_CONTRACT_ID: ""
+  # ── Frontend ─────────────────────────────────────────────────────────────
+  # VITE_API_PROXY is used by the Vite dev server only; the production nginx
+  # image proxies /api to pero-indexer:3001 directly (see frontend/nginx.conf).
+  VITE_API_PROXY: "http://pero-indexer:3001"

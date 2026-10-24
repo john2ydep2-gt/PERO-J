@@ -3,8 +3,10 @@ import rateLimit from "express-rate-limit";
 import { StrKey } from "@stellar/stellar-sdk";
 import { db } from "./db.js";
 import { fetchTokenMetadata } from "./sep41Metadata.js";
+import { formatOracleDisputes, oracleDisputes } from "./oracleDisputes.js";
 import { health } from "./index.js";
 import { eventEmitter } from "./events.js";
+import { MAX_TITLE_LEN, MAX_DESCRIPTION_LEN } from "./sanitize.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -16,13 +18,17 @@ const asyncHandler = (fn) => (req, res, next) => {
  * Admin-key authentication middleware for privileged operations.
  * Reads the expected key from the API_ADMIN_KEY environment variable
  * and validates it against an Authorization: Bearer <key> header.
+ *
+ * During a zero-downtime key rotation (see docs/SECRET-ROTATION.md) the
+ * previous key may be supplied via API_ADMIN_KEY_PREVIOUS and is accepted
+ * until it is removed at the end of the overlap window.
  */
 const requireAdminKey = (req, res, next) => {
   const authHeader = req.headers.authorization || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const token = match ? match[1] : null;
-  const expected = process.env.API_ADMIN_KEY;
-  if (!expected || !token || token !== expected) {
+  const accepted = [process.env.API_ADMIN_KEY, process.env.API_ADMIN_KEY_PREVIOUS].filter(Boolean);
+  if (!token || !accepted.includes(token)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();
@@ -65,7 +71,7 @@ export function validateContractPayload(body) {
     return "Request body must be a JSON object";
   }
 
-  const { id, name, functions } = body;
+  const { id, name, description, functions } = body;
 
   if (typeof id !== "string" || id.trim() === "") {
     return "id must be a non-empty string";
@@ -73,6 +79,14 @@ export function validateContractPayload(body) {
 
   if (typeof name !== "string" || name.trim() === "") {
     return "name must be a non-empty string";
+  }
+
+  if (name.length > MAX_TITLE_LEN) {
+    return `name exceeds maximum limit of ${MAX_TITLE_LEN} characters`;
+  }
+
+  if (typeof description === "string" && description.length > MAX_DESCRIPTION_LEN) {
+    return `description exceeds maximum limit of ${MAX_DESCRIPTION_LEN} characters`;
   }
 
   if (!Array.isArray(functions)) {
@@ -85,7 +99,15 @@ export function validateContractPayload(body) {
 export function createApp() {
   const app = express();
   let distinctFunctionsCache = null;
+  app.use(securityHeaders);
+  app.use(createCorsMiddleware());
   app.use(express.json());
+
+  app.get("/metrics", (_req, res) => {
+    res.type("text/plain; version=0.0.4").send(renderMetrics());
+  });
+
+  registerOracleRoutes(app, requireAdminKey, asyncHandler);
 
   // GET /health — liveness + readiness probe for container orchestrators and uptime monitors
   app.get(
@@ -125,6 +147,7 @@ export function createApp() {
         lag_seconds: lagSeconds,
         last_ledger: health.lastLedger,
         last_indexed_at: health.lastIndexedAt ? new Date(health.lastIndexedAt).toISOString() : null,
+        pool: typeof db.getPoolMetrics === "function" ? db.getPoolMetrics() : undefined,
       };
 
       res.status(degraded ? 503 : 200).json(body);
@@ -174,6 +197,20 @@ export function createApp() {
       };
       res.setHeader("Cache-Control", "public, max-age=60");
       return res.json(result);
+    })
+  );
+
+  // GET /api/v1/oracle/disputes — active disputes and current council votes
+  app.get(
+    "/api/v1/oracle/disputes",
+    asyncHandler(async (_req, res) => {
+      if (!process.env.ORACLE_CONTRACT_ID) {
+        return res.status(503).json({ error: "Oracle contract is not configured" });
+      }
+
+      const rows = await oracleDisputes.fetchActive();
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ disputes: formatOracleDisputes(rows) });
     })
   );
 
@@ -259,6 +296,40 @@ export function createApp() {
     });
   });
 
+
+  // GET /api/markets/stream - Server-Sent Events endpoint for real-time market updates
+  // Eliminates 3-5 second polling latency and conserves bandwidth on static markets
+  app.get("/api/markets/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const targetContract = req.query.contract ? String(req.query.contract).trim() : null;
+
+    // Send initial connection ack
+    res.write(`data: ${JSON.stringify({ type: "connected", timestamp: Date.now() })}\n\n`);
+
+    const onMarketUpdate = (update) => {
+      if (targetContract && update.contractId && update.contractId !== targetContract) {
+        return;
+      }
+      res.write(`data: ${JSON.stringify(update)}\n\n`);
+    };
+
+    // Heartbeat to keep connection alive without pushing redundant static market data
+    const heartbeatTimer = setInterval(() => {
+      res.write(": keepalive\n\n");
+    }, 15000);
+
+    eventEmitter.on("market_update", onMarketUpdate);
+
+    res.on("close", () => {
+      clearInterval(heartbeatTimer);
+      eventEmitter.off("market_update", onMarketUpdate);
+    });
+  });
   // GET /api/events/:seq/raw — raw un-decoded topics and data for a single event.
   // Must be registered BEFORE /api/events/:seq so Express doesn't consume "raw"
   // as the :seq parameter.
@@ -387,6 +458,27 @@ export function createApp() {
       res.status(201).json({ ok: true });
     })
   );
+
+  // POST /api/oracle/attestations — submit and verify off-chain oracle signed payload
+  // Enforces domain separation, freshness window (< 5m), cryptographic signature verification,
+  // and replay attack defense via database unique constraint on (provider_id, nonce).
+  const handleOracleAttestation = asyncHandler(async (req, res) => {
+    try {
+      const result = await verifyAndConsumeOracleAttestation(req.body);
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof OracleVerificationError) {
+        return res.status(err.statusCode).json({
+          error: err.message,
+          code: err.code,
+        });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/oracle/attestations", handleOracleAttestation);
+  app.post("/api/oracle/attestation", handleOracleAttestation);
 
   return app;
 }
