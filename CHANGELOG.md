@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`ddf0ee1`](../../commit/ddf0ee10e5cfce97877e8ede6d24f87cf8be4f7c))
+
 - Auto-update CHANGELOG.md [skip ci] ([`5569330`](../../commit/5569330cb81e49574005d1f95283356b02c1623d))
 
 - Auto-update CHANGELOG.md [skip ci] ([`077fa34`](../../commit/077fa3462dd86924903d2df1e66da667e97bdaff))
@@ -1440,6 +1442,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Set up Prometheus scraping configuration and Prometheus alert manager ([`c83ca4b`](../../commit/c83ca4bfa0f2e3b7455dbb222a72fcf3dc6f27c2))
 
 - Configure alert rules for stuck markets (>48h past expiry) and council inactivity ([`764231d`](../../commit/764231d5c6f5cc2a5ec1faa0b8be30588ac9e15f))
 
