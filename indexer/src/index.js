@@ -20,6 +20,14 @@ const POLL_MS = resolvePollMs();
 const LEADERBOARD_REFRESH_MS = 60_000;
 const RPC_ERROR_THRESHOLD = 3;
 
+/**
+ * Advisory lock id for the single active writer. Only the instance holding
+ * it polls the RPC and writes; others stand by and take over on release.
+ */
+const INDEXER_LOCK_ID = 837;
+const WRITER_STANDBY_POLL_MS = 5000;
+const WRITER_HEARTBEAT_MS = 5000;
+
 let rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
 /**
@@ -168,6 +176,34 @@ export async function indexLedger(ledger, rpcClient = rpc) {
 }
 
 /**
+ * Route an unparseable event to the dead-letter table with the failure reason.
+ * Never throws, so a bad event cannot crash the ingestion loop.
+ *
+ * @param {object} ev - Raw event object
+ * @param {string} reason
+ */
+async function sendToDeadLetter(ev, reason) {
+  console.warn(`[dlq] ledger=${ev?.ledger} tx=${ev?.txHash}: ${reason}`);
+  try {
+    let raw;
+    try {
+      raw = JSON.stringify(ev, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+    } catch {
+      raw = String(ev);
+    }
+    await db.insertDeadLetter({
+      contract_id: typeof ev?.contractId === "string" ? ev.contractId : undefined,
+      ledger: ev?.ledger,
+      tx_hash: typeof ev?.txHash === "string" ? ev.txHash : undefined,
+      reason,
+      raw_event: raw,
+    });
+  } catch (err) {
+    console.error("[dlq] failed to persist dead-letter event:", err.message);
+  }
+}
+
+/**
  * Return true when an event is the explorer contract's `update` event, which
  * signals that a registered contract's ABI metadata changed on-chain.
  *
@@ -282,7 +318,7 @@ async function run() {
   stopDlqWorker();
   stopDriftDetector();
   await db.close();
-  process.exit(0);
+  process.exit(lockLost ? 1 : 0);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

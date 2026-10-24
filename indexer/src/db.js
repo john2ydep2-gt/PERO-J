@@ -53,6 +53,9 @@ pool.on("error", (err) => {
   console.error("Unexpected error on idle database client:", err);
 });
 const MIGRATION_LOCK_ID = 57_056;
+
+/** Dedicated client holding the single-writer advisory lock, if owned. */
+let writerLockClient = null;
 const MAX_PAGE = 200;
 const CHECKPOINT_SERVICE_NAME = "soroban-indexer";
 const EVENT_INSERT_SQL = `INSERT INTO events (contract_id, function, ledger, tx_hash, description, raw_topics, raw_data, sac_asset, event_addresses, onchain_seq)
