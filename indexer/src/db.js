@@ -84,6 +84,45 @@ function escapeLikePattern(value) {
     .replace(/[\[%_]/g, "\\$&");
 }
 
+/**
+ * Encodes an opaque pagination cursor from a record identifier and timestamp.
+ *
+ * @param {object} item
+ * @param {string} [idField="id"]
+ * @param {string} [timeField="created_at"]
+ * @returns {string|null} base64url encoded cursor
+ */
+export function encodeCursor(item, idField = "id", timeField = "created_at") {
+  if (!item || typeof item !== "object") return null;
+  const id = item[idField] ?? item.seq ?? item.contract_id;
+  const time = item[timeField]
+    ? new Date(item[timeField]).toISOString()
+    : item.event_count !== undefined
+    ? String(item.event_count)
+    : new Date().toISOString();
+  return Buffer.from(JSON.stringify({ id, time })).toString("base64url");
+}
+
+/**
+ * Decodes an opaque base64url cursor back into { id, time }.
+ *
+ * @param {string} cursorStr
+ * @returns {{ id: any, time: string } | null}
+ */
+export function decodeCursor(cursorStr) {
+  if (!cursorStr || typeof cursorStr !== "string") return null;
+  try {
+    const raw = Buffer.from(cursorStr, "base64url").toString("utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && (parsed.id !== undefined || parsed.time !== undefined)) {
+      return parsed;
+    }
+  } catch {
+    // Malformed cursor
+  }
+  return null;
+}
+
 const migrations = [
   {
     id: 1,
@@ -378,6 +417,7 @@ export const db = {
 
   /**
    * Return a paginated list of events, optionally filtered by contract and/or function.
+   * Supports cursor-based pagination (opaque base64) and backward-compatible page offset.
    * Uses pool.query — safe to call outside of init().
    *
    * @param {object}  [opts]
@@ -386,9 +426,10 @@ export const db = {
    * @param {string}  [opts.q]         - Full-text search in description field.
    * @param {number}  [opts.page=1]    - 1-based page number.
    * @param {number}  [opts.limit=25]  - Rows per page.
-   * @returns {Promise<{ events: DecodedEvent[], total: number, page: number, limit: number }>}
+   * @param {string}  [opts.cursor]    - Opaque cursor for cursor-based pagination.
+   * @returns {Promise<{ events: DecodedEvent[], next_cursor: string|null, total: number, page: number, limit: number }>}
    */
-  async getEvents({ contract, fn, q, page = 1, limit = 25 } = {}) {
+  async getEvents({ contract, fn, q, page = 1, limit = 25, cursor = null } = {}) {
     const pageNum = Number(page) || 1;
     const limitNum = Math.min(MAX_PAGE, Number(limit) || 25);
     const conditions = [];
@@ -420,16 +461,40 @@ export const db = {
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const countParams = [...params];
     const countRes = await pool.query(`SELECT COUNT(*) FROM events ${where}`, countParams);
-    const total = parseInt(countRes.rows[0].count, 10);
+    const total = parseInt(countRes.rows[0]?.count ?? "0", 10);
 
-    const offset = (pageNum - 1) * limitNum;
-    params.push(limitNum, offset);
+    const queryConditions = [...conditions];
+    const queryParams = [...params];
+    const decoded = decodeCursor(cursor);
+    if (decoded) {
+      queryParams.push(decoded.time, decoded.id);
+      queryConditions.push(`(created_at, seq) < ($${queryParams.length - 1}, $${queryParams.length})`);
+    }
+    const queryWhere = queryConditions.length ? `WHERE ${queryConditions.join(" AND ")}` : "";
+
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    queryParams.push(limitNum + 1);
+    const limitIdx = queryParams.length;
+    let limitClause = `LIMIT $${limitIdx}`;
+    if (offset > 0) {
+      queryParams.push(offset);
+      limitClause += ` OFFSET $${queryParams.length}`;
+    }
+
     const { rows } = await pool.query(
-      `SELECT * FROM events ${where}
-       ORDER BY ledger DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
+      `SELECT * FROM events ${queryWhere}
+       ORDER BY ledger DESC, seq DESC ${limitClause}`,
+      queryParams
     );
-    return { events: rows, total, page: pageNum, limit: limitNum };
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "seq", "created_at");
+    }
+
+    return { events: rows || [], next_cursor, total, page: pageNum, limit: limitNum };
   },
 
   /**
@@ -610,23 +675,186 @@ export const db = {
   /**
    * Return the top N contracts by event count, joined with the contracts
    * table to include the contract name.
+   * Supports cursor-based pagination and offset pagination.
    * Uses pool.query — safe to call outside of init().
    *
-   * @param {number} [limit=10] - Max rows to return (capped at 50).
+   * @param {number|object} [opts=10] - Max rows or options object { limit, cursor, page }
    * @returns {Promise<Array<{ contract_id: string, name: string, event_count: number }>>}
    */
-  async getLeaderboard(limit = 10) {
-    const capped = Math.min(Math.max(Number(limit) || 10, 1), 50);
+  async getLeaderboard(opts = 10) {
+    let limitNum = 10;
+    let cursorVal = null;
+    let pageNum = 1;
+    let isObjectCall = false;
+
+    if (typeof opts === "object" && opts !== null) {
+      isObjectCall = true;
+      limitNum = Number(opts.limit) || 10;
+      cursorVal = opts.cursor || null;
+      pageNum = Number(opts.page) || 1;
+    } else {
+      limitNum = Number(opts) || 10;
+    }
+
+    const capped = Math.min(Math.max(limitNum, 1), 50);
+    const decoded = decodeCursor(cursorVal);
+    const params = [];
+    let having = "";
+    if (decoded) {
+      params.push(Number(decoded.time) || 0, String(decoded.id));
+      having = `HAVING (COUNT(*), e.contract_id) < ($1, $2)`;
+    }
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * capped : 0;
+    params.push(capped + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
     const { rows } = await pool.query(
       `SELECT e.contract_id, COALESCE(c.name, e.contract_id) AS name, COUNT(*) AS event_count
        FROM events e
        LEFT JOIN contracts c ON c.id = e.contract_id
        GROUP BY e.contract_id, COALESCE(c.name, e.contract_id)
-       ORDER BY event_count DESC
-       LIMIT $1`,
-      [capped]
+       ${having}
+       ORDER BY event_count DESC, e.contract_id DESC
+       ${limitClause}`,
+      params
     );
-    return rows;
+
+    let next_cursor = null;
+    if (rows && rows.length > capped) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(
+        { contract_id: last.contract_id, event_count: last.event_count },
+        "contract_id",
+        "event_count"
+      );
+    }
+
+    if (isObjectCall) {
+      return {
+        items: rows || [],
+        leaderboard: rows || [],
+        next_cursor,
+        limit: capped,
+        page: pageNum,
+      };
+    }
+
+    const arr = rows || [];
+    arr.next_cursor = next_cursor;
+    return arr;
+  },
+
+  /**
+   * Return paginated prediction markets.
+   *
+   * @param {object} [opts]
+   * @param {number} [opts.limit=20]
+   * @param {string} [opts.cursor=null]
+   * @param {number} [opts.page=1]
+   * @returns {Promise<{ markets: any[], next_cursor: string|null, total: number, limit: number, page: number }>}
+   */
+  async getMarkets({ limit = 20, cursor = null, page = 1 } = {}) {
+    const limitNum = Math.min(MAX_PAGE, Number(limit) || 20);
+    const pageNum = Number(page) || 1;
+    const decoded = decodeCursor(cursor);
+    const params = [];
+    let where = "";
+    if (decoded) {
+      params.push(decoded.time, decoded.id);
+      where = `WHERE (created_at, id) < ($1, $2)`;
+    }
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    params.push(limitNum + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
+    let rows = [];
+    let total = 0;
+    try {
+      const countRes = await pool.query("SELECT COUNT(*) FROM markets");
+      total = parseInt(countRes.rows[0]?.count ?? "0", 10);
+      const res = await pool.query(
+        `SELECT * FROM markets ${where} ORDER BY created_at DESC, id DESC ${limitClause}`,
+        params
+      );
+      rows = res.rows;
+    } catch {
+      rows = [];
+    }
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "id", "created_at");
+    }
+    return { markets: rows, items: rows, next_cursor, total, limit: limitNum, page: pageNum };
+  },
+
+  /**
+   * Return paginated bets, optionally filtered by market_id.
+   *
+   * @param {object} [opts]
+   * @param {string} [opts.market_id=null]
+   * @param {number} [opts.limit=20]
+   * @param {string} [opts.cursor=null]
+   * @param {number} [opts.page=1]
+   * @returns {Promise<{ bets: any[], next_cursor: string|null, total: number, limit: number, page: number }>}
+   */
+  async getBets({ market_id = null, limit = 20, cursor = null, page = 1 } = {}) {
+    const limitNum = Math.min(MAX_PAGE, Number(limit) || 20);
+    const pageNum = Number(page) || 1;
+    const decoded = decodeCursor(cursor);
+    const conditions = [];
+    const params = [];
+    if (market_id) {
+      params.push(market_id);
+      conditions.push(`market_id = $${params.length}`);
+    }
+    if (decoded) {
+      params.push(decoded.time, decoded.id);
+      conditions.push(`(created_at, id) < ($${params.length - 1}, $${params.length})`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const offset = (!decoded && pageNum > 1) ? (pageNum - 1) * limitNum : 0;
+    params.push(limitNum + 1);
+    let limitClause = `LIMIT $${params.length}`;
+    if (offset > 0) {
+      params.push(offset);
+      limitClause += ` OFFSET $${params.length}`;
+    }
+
+    let rows = [];
+    let total = 0;
+    try {
+      const countWhere = market_id ? "WHERE market_id = $1" : "";
+      const countParams = market_id ? [market_id] : [];
+      const countRes = await pool.query(`SELECT COUNT(*) FROM bets ${countWhere}`, countParams);
+      total = parseInt(countRes.rows[0]?.count ?? "0", 10);
+      const res = await pool.query(
+        `SELECT * FROM bets ${where} ORDER BY created_at DESC, id DESC ${limitClause}`,
+        params
+      );
+      rows = res.rows;
+    } catch {
+      rows = [];
+    }
+
+    let next_cursor = null;
+    if (rows && rows.length > limitNum) {
+      rows.pop();
+      const last = rows[rows.length - 1];
+      next_cursor = encodeCursor(last, "id", "created_at");
+    }
+    return { bets: rows, items: rows, next_cursor, total, limit: limitNum, page: pageNum };
   },
 
   /**

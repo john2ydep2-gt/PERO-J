@@ -97,6 +97,7 @@ export function validateContractPayload(body) {
 }
 
 export function createApp() {
+  marketCacheManager.start();
   const app = express();
   let distinctFunctionsCache = null;
   app.use(securityHeaders);
@@ -177,9 +178,21 @@ export function createApp() {
     })
   );
 
-  // GET /api/functions — distinct function names across all events
-  app.get(
-    "/api/functions",
+  // Legacy route redirect middleware: redirects /api/* (except /api/v1/*) to /api/v1/* with HTTP 301 (issue #965)
+  app.use((req, res, next) => {
+    const url = req.originalUrl || req.url;
+    if (url.startsWith("/api") && !url.startsWith("/api/v1/") && url !== "/api/v1") {
+      const target = url.replace(/^\/api(?=\/|\?|$)/, "/api/v1");
+      return res.redirect(301, target);
+    }
+    next();
+  });
+
+  const v1Router = express.Router();
+
+  // GET /api/v1/functions — distinct function names across all events
+  v1Router.get(
+    "/functions",
     asyncHandler(async (req, res) => {
       const now = Date.now();
       const cacheIsFresh =
@@ -230,55 +243,175 @@ export function createApp() {
     })
   );
 
-  // GET /api/leaderboard?limit=10 — top contracts by event volume
-  app.get(
-    "/api/leaderboard",
+  // GET /api/v1/leaderboard?limit=10&cursor= — top contracts by event volume (issue #966)
+  v1Router.get(
+    "/leaderboard",
     asyncHandler(async (req, res) => {
       const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
-      const result = await db.getLeaderboard(limit);
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const result = await db.getLeaderboard({ limit, cursor, page });
       res.setHeader("Cache-Control", "public, max-age=60");
       res.json(result);
     })
   );
 
-  // GET /api/events?contract=&fn=&page=&q=
-  app.get(
-    "/api/events",
+  // GET /api/v1/markets?limit=&cursor=&page= — prediction markets cursor pagination (issue #966)
+  v1Router.get(
+    "/markets",
+    asyncHandler(async (req, res) => {
+      const limit = Number(req.query.limit) || 20;
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const result = await db.getMarkets({ limit, cursor, page });
+      res.json(result);
+    })
+  );
+
+  // GET /api/v1/markets/:id — market details with Redis caching (issue #968)
+  v1Router.get(
+    "/markets/:id",
+    asyncHandler(async (req, res) => {
+      const market = await marketCacheManager.getMarket(req.params.id, () =>
+        db.getMarket(req.params.id)
+      );
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+      res.json(market);
+    })
+  );
+
+  // GET /api/v1/markets/:id/odds — fresh odds with immediate Redis cache invalidation support (issue #968)
+  v1Router.get(
+    "/markets/:id/odds",
+    asyncHandler(async (req, res) => {
+      const odds = await marketCacheManager.getMarketOdds(req.params.id, () =>
+        db.getMarketOdds(req.params.id)
+      );
+      if (!odds) {
+        return res.status(404).json({ error: "Odds not found for market" });
+      }
+      res.json({ market_id: req.params.id, odds });
+    })
+  );
+
+  // POST /api/v1/events/bet-placed — process BetPlaced event with <100ms cache invalidation & pre-warming (issue #968)
+  v1Router.post(
+    "/events/bet-placed",
+    asyncHandler(async (req, res) => {
+      const result = await marketCacheManager.handleBetPlacedEvent(req.body);
+      await publish(BET_PLACED_CHANNEL, req.body);
+      res.status(200).json(result);
+    })
+  );
+
+  // GET /api/v1/oracle/circuit-breaker — circuit breaker and automated resolution status (issue #958)
+  v1Router.get(
+    "/oracle/circuit-breaker",
+    asyncHandler(async (req, res) => {
+      res.json(bondEscrowWorker.getCircuitBreakerStatus());
+    })
+  );
+
+  // POST /api/v1/oracle/audit-bonds — run bond escrow invariant verification worker (issue #958)
+  v1Router.post(
+    "/oracle/audit-bonds",
+    asyncHandler(async (req, res) => {
+      const balance =
+        req.body?.contract_balance !== undefined ? req.body.contract_balance : null;
+      const report = await bondEscrowWorker.verifyEscrowInvariant({
+        contractBalance: balance,
+      });
+      const status = report.valid ? 200 : 409;
+      res.status(status).json(report);
+    })
+  );
+
+  // GET /api/v1/disputes/bonds — list dispute bonds and aggregate escrow accounting (issue #958)
+  v1Router.get(
+    "/disputes/bonds",
+    asyncHandler(async (req, res) => {
+      const { dispute_id, status } = req.query;
+      const bonds = await db.getDisputeBonds({ dispute_id, status });
+      const accounting = await db.getBondAccounting();
+      res.json({ bonds, accounting });
+    })
+  );
+
+  // POST /api/v1/disputes/bonds — record deposited dispute bond (issue #958)
+  v1Router.post(
+    "/disputes/bonds",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const { id, dispute_id, market_id, bond_type, depositor, amount } = req.body;
+      if (!id || !dispute_id || !bond_type || !depositor || !amount) {
+        return res.status(400).json({ error: "Missing required dispute bond fields" });
+      }
+      const bond = await db.recordDisputeBond({
+        id,
+        dispute_id,
+        market_id,
+        bond_type,
+        depositor,
+        amount,
+      });
+      res.status(201).json(bond);
+    })
+  );
+
+  // POST /api/v1/disputes/bonds/:id/settle — settle dispute bond (issue #958)
+  v1Router.post(
+    "/disputes/bonds/:id/settle",
+    requireAdminKey,
+    asyncHandler(async (req, res) => {
+      const { status = "settled", settled_amount } = req.body;
+      if (settled_amount === undefined) {
+        return res.status(400).json({ error: "settled_amount is required" });
+      }
+      const settled = await db.settleDisputeBond({
+        id: req.params.id,
+        status,
+        settled_amount,
+      });
+      if (!settled) {
+        return res.status(404).json({ error: "Dispute bond not found" });
+      }
+      res.json(settled);
+    })
+  );
+
+  // GET /api/v1/bets?market_id=&limit=&cursor=&page= — bets cursor pagination (issue #966)
+  v1Router.get(
+    "/bets",
+    asyncHandler(async (req, res) => {
+      const limit = Number(req.query.limit) || 20;
+      const cursor = req.query.cursor || null;
+      const page = Number(req.query.page) || 1;
+      const market_id = req.query.market_id || null;
+      const result = await db.getBets({ market_id, limit, cursor, page });
+      res.json(result);
+    })
+  );
+
+  // GET /api/v1/events?contract=&fn=&page=&limit=&cursor=&q= — events cursor pagination (issue #966)
+  v1Router.get(
+    "/events",
     asyncHandler(async (req, res) => {
       const result = await db.getEvents({
         contract: req.query.contract,
         fn: req.query.fn,
         q: req.query.q,
         page: Number(req.query.page) || 1,
+        limit: Number(req.query.limit) || 25,
+        cursor: req.query.cursor || null,
       });
       res.json(result);
     })
   );
 
-  // GET /api/events/:seq/raw
-  app.get(
-    "/api/events/:seq/raw",
-    asyncHandler(async (req, res) => {
-      const seqStr = String(req.params.seq).trim();
-      const seq = parseInt(seqStr, 10);
-      if (isNaN(seq) || seq < 0 || !/^\d+$/.test(seqStr)) {
-        return res.status(400).json({ error: "seq must be a non-negative integer" });
-      }
-      const ev = await db.getEvent(seq);
-      if (!ev) {
-        return res.status(404).json({ error: "Not found" });
-      }
-      res.json({
-        seq: ev.seq,
-        raw_topics: ev.raw_topics,
-        raw_data: ev.raw_data,
-        tx_hash: ev.tx_hash,
-      });
-    })
-  );
-
-  // GET /api/events/stream — Server-Sent Events endpoint for live event feed
-  app.get("/api/events/stream", (req, res) => {
+  // GET /api/v1/events/stream — Server-Sent Events endpoint for live event feed
+  v1Router.get("/events/stream", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -354,9 +487,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/events/:seq
-  app.get(
-    "/api/events/:seq",
+  // GET /api/v1/events/:seq — single event by sequence number
+  v1Router.get(
+    "/events/:seq",
     asyncHandler(async (req, res) => {
       const seqStr = String(req.params.seq).trim();
       const seq = parseInt(seqStr, 10);
@@ -371,32 +504,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/events/:seq/raw — return only the raw event payload fields.
-  app.get(
-    "/api/events/:seq/raw",
-    asyncHandler(async (req, res) => {
-      const seqStr = String(req.params.seq).trim();
-      const seq = parseInt(seqStr, 10);
-      if (isNaN(seq) || seq < 0 || !/^\d+$/.test(seqStr)) {
-        return res.status(400).json({ error: "seq must be a non-negative integer" });
-      }
-      const ev = await db.getEvent(seq);
-      if (!ev) {
-        return res.status(404).json({ error: "Not found" });
-      }
-      res.json({
-        seq: ev.seq,
-        raw_topics: ev.raw_topics,
-        raw_data: ev.raw_data,
-        tx_hash: ev.tx_hash,
-      });
-    })
-  );
-
-  // GET /api/contracts?q=&page=&limit= — paginated list of registered contracts,
-  // optionally filtered by name/description via case-insensitive search.
-  app.get(
-    "/api/contracts",
+  // GET /api/v1/contracts?q=&page=&limit= — paginated list of registered contracts
+  v1Router.get(
+    "/contracts",
     asyncHandler(async (req, res) => {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 25;
@@ -405,10 +515,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/contracts/:id/events?fn=&page= — paginated event history for a
-  // registered contract, optionally filtered by function name.
-  app.get(
-    "/api/contracts/:id/events",
+  // GET /api/v1/contracts/:id/events?fn=&page= — paginated event history for contract
+  v1Router.get(
+    "/contracts/:id/events",
     asyncHandler(async (req, res) => {
       const meta = await db.getContractMeta(req.params.id);
       if (!meta) {
@@ -423,9 +532,9 @@ export function createApp() {
     })
   );
 
-  // GET /api/contracts/:id
-  app.get(
-    "/api/contracts/:id",
+  // GET /api/v1/contracts/:id
+  v1Router.get(
+    "/contracts/:id",
     asyncHandler(async (req, res) => {
       const meta = await db.getContractMeta(req.params.id);
       if (!meta) {
@@ -435,9 +544,9 @@ export function createApp() {
     })
   );
 
-  // POST /api/contracts — register contract ABI metadata
-  app.post(
-    "/api/contracts",
+  // POST /api/v1/contracts — register contract ABI metadata
+  v1Router.post(
+    "/contracts",
     requireAdminKey,
     asyncHandler(async (req, res) => {
       const validationError = validateContractPayload(req.body);
