@@ -1018,6 +1018,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 ### Documentation
 
+- Auto-update CHANGELOG.md [skip ci] ([`0670956`](../../commit/067095630146ab2da49e25c029990bffe8a4be84))
+
 - Auto-update CHANGELOG.md [skip ci] ([`6dc3378`](../../commit/6dc33781ee4f6612f3b0679490763b64ba7ca084))
 
 - Auto-update CHANGELOG.md [skip ci] ([`1bdab8d`](../../commit/1bdab8d66a9de33c0b1a37b60d2cbdc050c43647))
@@ -1426,6 +1428,8 @@ Issue [#118](../../issues/118) — Contract admin key management
 
 
 ### Features
+
+- Configure alert rules for indexer stall (lag > 100 ledgers) and RPC failure bursts ([`8c80654`](../../commit/8c80654a6306a6563a33ca22abc7253243bc9c9e))
 
 - Add market, IPREDICT token and referral registry contracts ([`46a47ed`](../../commit/46a47edf7c80d55db317f50c33bfad01da23d3d7))
 
