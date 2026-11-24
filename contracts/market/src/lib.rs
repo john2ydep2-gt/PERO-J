@@ -14,7 +14,10 @@ pub enum Error {
     ContractPaused = 4,
     InvalidAmount = 5,
     InvalidState = 6,
+    InvalidLimit = 7,
 }
+
+const MAX_BETTOR_PAGE_SIZE: u32 = 100;
 
 /// Single-field market state replacing the separate
 /// `resolved` / `cancelled` / `outcome` / `disputed` flags.
@@ -34,6 +37,13 @@ pub struct Market {
     pub status: MarketStatus,
     pub yes_pool: i128,
     pub no_pool: i128,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct BettorPage {
+    pub bettors: soroban_sdk::Vec<Address>,
+    pub next_cursor: Option<u32>,
 }
 
 /// Pre-packing layout, kept so existing active markets still deserialize.
@@ -57,6 +67,8 @@ pub enum DataKey {
     Market,
     LegacyMarket,
     HasBet(Address),
+    BettorCount,
+    Bettor(u32),
 }
 
 #[contract]
@@ -173,6 +185,12 @@ impl MarketContract {
         let first = !env.storage().persistent().has(&DataKey::HasBet(bettor.clone()));
         if first {
             env.storage().persistent().set(&DataKey::HasBet(bettor.clone()), &true);
+            let count: u32 = env.storage().persistent().get(&DataKey::BettorCount).unwrap_or(0);
+            let next_count = count
+                .checked_add(1)
+                .unwrap_or_else(|| panic_with_error!(&env, Error::InvalidState));
+            env.storage().persistent().set(&DataKey::Bettor(count), &bettor);
+            env.storage().persistent().set(&DataKey::BettorCount, &next_count);
             if let Some(reg) = env.storage().instance().get::<_, Address>(&DataKey::Registry) {
                 env.invoke_contract::<()>(
                     &reg,
@@ -180,6 +198,32 @@ impl MarketContract {
                     vec![&env, env.current_contract_address().to_val(), bettor.to_val()],
                 );
             }
+        }
+    }
+
+    /// Returns at most 100 bettors, starting at `cursor`; use `next_cursor` to fetch the next page.
+    pub fn get_market_bettors(env: Env, cursor: u32, limit: u32) -> BettorPage {
+        if limit == 0 || limit > MAX_BETTOR_PAGE_SIZE {
+            panic_with_error!(&env, Error::InvalidLimit);
+        }
+
+        let count: u32 = env.storage().persistent().get(&DataKey::BettorCount).unwrap_or(0);
+        let end = cursor.saturating_add(limit).min(count);
+        let mut bettors = soroban_sdk::Vec::new(&env);
+        let mut index = cursor;
+        while index < end {
+            let bettor: Address = env
+                .storage()
+                .persistent()
+                .get(&DataKey::Bettor(index))
+                .unwrap_or_else(|| panic_with_error!(&env, Error::InvalidState));
+            bettors.push_back(bettor);
+            index += 1;
+        }
+
+        BettorPage {
+            bettors,
+            next_cursor: if end < count { Some(end) } else { None },
         }
     }
 
